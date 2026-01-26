@@ -1,0 +1,14 @@
+﻿<RevitAddIns>
+    <AddIn Type="Application">
+        <Name>FMReadiness_v3</Name>
+        <Assembly>FMReadiness_v3\FMReadiness_v3.dll</Assembly>
+        <AddInId>A4A953A4-D6F7-4B19-A4B9-53F0CB790651</AddInId>
+        <FullClassName>FMReadiness_v3.Application</FullClassName>
+        <VendorId>Development</VendorId>
+        <VendorDescription></VendorDescription>
+    </AddIn>
+    <ManifestSettings>
+        <UseRevitContext>False</UseRevitContext>
+        <ContextName>FMReadiness_v3</ContextName>
+    </ManifestSettings>
+</RevitAddIns>
