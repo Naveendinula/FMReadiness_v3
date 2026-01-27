@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
+using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using Autodesk.Revit.DB;
@@ -20,6 +21,8 @@ namespace FMReadiness_v3.UI.Panes
         private static ExternalEvent? _get2dViewsEvent;
         private static Open2dViewExternalEventHandler? _open2dViewHandler;
         private static ExternalEvent? _open2dViewEvent;
+        private static ParameterEditorExternalEventHandler? _paramEditorHandler;
+        private static ExternalEvent? _paramEditorEvent;
         private static string? _cachedJson;
 
         public static void Initialize()
@@ -32,16 +35,28 @@ namespace FMReadiness_v3.UI.Panes
 
             _open2dViewHandler = new Open2dViewExternalEventHandler();
             _open2dViewEvent = ExternalEvent.Create(_open2dViewHandler);
+
+            _paramEditorHandler = new ParameterEditorExternalEventHandler
+            {
+                PostResult = PostToWebView
+            };
+            _paramEditorEvent = ExternalEvent.Create(_paramEditorHandler);
         }
 
         public static void RegisterPane(AuditWebPane pane)
         {
             _paneInstance = pane;
 
-            if (!string.IsNullOrEmpty(_cachedJson))
+            var cachedJson = _cachedJson;
+            if (!string.IsNullOrEmpty(cachedJson))
             {
-                _paneInstance.PostAuditResults(_cachedJson);
+                _paneInstance.PostAuditResults(cachedJson!);
             }
+        }
+
+        private static void PostToWebView(string json)
+        {
+            _paneInstance?.PostAuditResults(json);
         }
 
         public static void RequestSelectZoom(int elementId)
@@ -66,6 +81,20 @@ namespace FMReadiness_v3.UI.Panes
 
             _open2dViewHandler.PendingViewId = viewId;
             _open2dViewEvent.Raise();
+        }
+
+        public static void RequestParameterEditorOperation(ParameterEditorExternalEventHandler.OperationType operation, string? jsonPayload = null)
+        {
+            if (_paramEditorHandler == null || _paramEditorEvent == null) return;
+
+            _paramEditorHandler.CurrentOperation = operation;
+            _paramEditorHandler.JsonPayload = jsonPayload;
+            _paramEditorEvent.Raise();
+        }
+
+        public static void RequestAuditRefresh()
+        {
+            RequestParameterEditorOperation(ParameterEditorExternalEventHandler.OperationType.RefreshAudit);
         }
 
         internal static void Post2dViewOptions(int elementId, IReadOnlyList<ViewOption> views)
@@ -164,44 +193,70 @@ namespace FMReadiness_v3.UI.Panes
 #endif
         }
 
+        [DataContract]
         private class AuditResultsDto
         {
+            [DataMember(Name = "type")]
             public string type { get; set; } = "auditResults";
+            [DataMember(Name = "summary")]
             public SummaryDto? summary { get; set; }
+            [DataMember(Name = "rows")]
             public List<RowDto> rows { get; set; } = new();
         }
 
+        [DataContract]
         private class SummaryDto
         {
+            [DataMember(Name = "overallReadinessPercent")]
             public double overallReadinessPercent { get; set; }
+            [DataMember(Name = "fullyReady")]
             public int fullyReady { get; set; }
+            [DataMember(Name = "totalAudited")]
             public int totalAudited { get; set; }
+            [DataMember(Name = "groupScores")]
             public Dictionary<string, int> groupScores { get; set; } = new();
         }
 
+        [DataContract]
         private class RowDto
         {
+            [DataMember(Name = "elementId")]
             public int elementId { get; set; }
+            [DataMember(Name = "category")]
             public string category { get; set; } = string.Empty;
+            [DataMember(Name = "family")]
             public string family { get; set; } = string.Empty;
+            [DataMember(Name = "type")]
             public string type { get; set; } = string.Empty;
+            [DataMember(Name = "missingCount")]
             public int missingCount { get; set; }
+            [DataMember(Name = "readinessPercent")]
             public int readinessPercent { get; set; }
+            [DataMember(Name = "missingParams")]
             public string missingParams { get; set; } = string.Empty;
+            [DataMember(Name = "groupScores")]
             public Dictionary<string, int> groupScores { get; set; } = new();
         }
 
+        [DataContract]
         private class TwoDViewOptionsDto
         {
+            [DataMember(Name = "type")]
             public string type { get; set; } = "2dViewOptions";
+            [DataMember(Name = "elementId")]
             public int elementId { get; set; }
+            [DataMember(Name = "views")]
             public List<ViewDto> views { get; set; } = new();
         }
 
+        [DataContract]
         private class ViewDto
         {
+            [DataMember(Name = "viewId")]
             public int viewId { get; set; }
+            [DataMember(Name = "name")]
             public string name { get; set; } = string.Empty;
+            [DataMember(Name = "viewType")]
             public string viewType { get; set; } = string.Empty;
         }
 

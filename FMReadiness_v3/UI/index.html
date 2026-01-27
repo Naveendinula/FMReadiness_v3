@@ -11,68 +11,270 @@
 </head>
 <body>
     <div class="container">
+        <!-- Header -->
         <header class="header">
             <h1>FM Readiness</h1>
         </header>
 
-        <div class="summary-cards">
-            <div class="card">
-                <div class="card-value" id="overallReadiness">--%</div>
-                <div class="card-label">Readiness</div>
-                <div class="card-sublabel">Overall score</div>
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="audit">Audit Results</button>
+            <button class="tab-btn" data-tab="editor">Parameter Editor</button>
+        </div>
+
+        <!-- Tab: Audit Results -->
+        <div id="tab-audit" class="tab-content active">
+            <!-- Summary Cards -->
+            <div class="summary-cards">
+                <div class="card">
+                    <div class="card-value" id="overallReadiness">--%</div>
+                    <div class="card-label">Readiness</div>
+                    <div class="card-sublabel">Overall score</div>
+                </div>
+                <div class="card">
+                    <div class="card-value" id="fullyReadyCount">--</div>
+                    <div class="card-label">Ready</div>
+                    <div class="card-sublabel" id="fullyReadySublabel">-- assets complete</div>
+                </div>
+                <div class="card">
+                    <div class="card-value" id="missingCount">--</div>
+                    <div class="card-label">Missing Data</div>
+                    <div class="card-sublabel" id="missingSublabel">-- assets incomplete</div>
+                </div>
+                <div class="card">
+                    <div class="card-value" id="totalCount">--</div>
+                    <div class="card-label">Total</div>
+                    <div class="card-sublabel">Assets audited</div>
+                </div>
             </div>
-            <div class="card">
-                <div class="card-value" id="fullyReadyCount">--</div>
-                <div class="card-label">Ready</div>
-                <div class="card-sublabel" id="fullyReadySublabel">-- assets complete</div>
+
+            <!-- Group Score Badges -->
+            <div class="group-scores" id="groupScores">
+                <!-- Populated by JS -->
             </div>
-            <div class="card">
-                <div class="card-value" id="missingCount">--</div>
-                <div class="card-label">Missing Data</div>
-                <div class="card-sublabel" id="missingSublabel">-- assets incomplete</div>
+
+            <!-- Controls -->
+            <div class="controls">
+                <input type="text" id="searchInput" placeholder="Search or filter" />
+                <label class="checkbox-label">
+                    <input type="checkbox" id="showMissingOnly" />
+                    Show only incomplete
+                </label>
             </div>
-            <div class="card">
-                <div class="card-value" id="totalCount">--</div>
-                <div class="card-label">Total</div>
-                <div class="card-sublabel">Assets audited</div>
+
+            <!-- Results Table -->
+            <div class="table-container">
+                <table id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>Element ID</th>
+                            <th>Status</th>
+                            <th>Category</th>
+                            <th>Family</th>
+                            <th>Type</th>
+                            <th>Readiness</th>
+                            <th>Groups</th>
+                            <th>Missing</th>
+                            <th>View</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Rows will be populated by JS -->
+                    </tbody>
+                </table>
+                <div id="emptyState" class="empty-state">
+                    Run an audit to see results
+                </div>
             </div>
         </div>
 
-        <div class="group-scores" id="groupScores"></div>
+        <!-- Tab: Parameter Editor -->
+        <div id="tab-editor" class="tab-content">
+            <!-- Selected Elements Section -->
+            <section class="editor-section">
+                <div class="section-header">
+                    <h3>Selected Elements</h3>
+                    <button class="btn-secondary btn-sm" id="refreshSelection">Refresh</button>
+                </div>
+                <div id="selectedElementInfo" class="selection-info">
+                    <p class="placeholder-text">Select elements in Revit and click Refresh</p>
+                </div>
+                <div id="instanceParamsForm" class="params-form hidden">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>FM_Barcode</label>
+                            <input type="text" id="edit_FM_Barcode" placeholder="Barcode/QR code">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_UniqueAssetId</label>
+                            <input type="text" id="edit_FM_UniqueAssetId" placeholder="CMMS Asset ID">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_InstallationDate</label>
+                            <input type="text" id="edit_FM_InstallationDate" placeholder="YYYY-MM-DD">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_WarrantyStart</label>
+                            <input type="text" id="edit_FM_WarrantyStart" placeholder="YYYY-MM-DD">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_WarrantyEnd</label>
+                            <input type="text" id="edit_FM_WarrantyEnd" placeholder="YYYY-MM-DD">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_Criticality</label>
+                            <select id="edit_FM_Criticality">
+                                <option value="">Select</option>
+                                <option value="1">1 - Low</option>
+                                <option value="2">2</option>
+                                <option value="3">3 - Medium</option>
+                                <option value="4">4</option>
+                                <option value="5">5 - Critical</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>FM_Trade</label>
+                            <input type="text" id="edit_FM_Trade" placeholder="HVAC, Electrical, etc.">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_PMTemplateId</label>
+                            <input type="text" id="edit_FM_PMTemplateId" placeholder="PM Template ID">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_PMFrequencyDays</label>
+                            <input type="number" id="edit_FM_PMFrequencyDays" placeholder="90">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_Building</label>
+                            <input type="text" id="edit_FM_Building" placeholder="Building name">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_LocationSpace</label>
+                            <input type="text" id="edit_FM_LocationSpace" placeholder="Location override">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" id="applyToSelected">Apply to Selected</button>
+                    </div>
+                </div>
+            </section>
 
-        <div class="controls">
-            <input type="text" id="searchInput" placeholder="Search or filter" />
-            <label class="checkbox-label">
-                <input type="checkbox" id="showMissingOnly" />
-                Show only incomplete
-            </label>
-        </div>
+            <!-- Category Bulk Fill Section -->
+            <section class="editor-section">
+                <div class="section-header">
+                    <h3>Category Bulk Fill</h3>
+                </div>
+                <div class="category-selector">
+                    <select id="bulkCategory">
+                        <option value="">Select Category</option>
+                        <option value="OST_MechanicalEquipment">Mechanical Equipment</option>
+                        <option value="OST_DuctTerminal">Duct Terminals</option>
+                        <option value="OST_DuctAccessory">Duct Accessories</option>
+                        <option value="OST_PipeAccessory">Pipe Accessories</option>
+                    </select>
+                    <span id="categoryCount" class="category-count"></span>
+                </div>
+                <div id="bulkParamsForm" class="params-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>FM_Building</label>
+                            <input type="text" id="bulk_FM_Building" placeholder="Apply to all">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_Trade</label>
+                            <input type="text" id="bulk_FM_Trade" placeholder="Apply to all">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_PMFrequencyDays</label>
+                            <input type="number" id="bulk_FM_PMFrequencyDays" placeholder="Apply to all">
+                        </div>
+                        <div class="form-group">
+                            <label>FM_Criticality</label>
+                            <select id="bulk_FM_Criticality">
+                                <option value="">No Change</option>
+                                <option value="1">1 - Low</option>
+                                <option value="2">2</option>
+                                <option value="3">3 - Medium</option>
+                                <option value="4">4</option>
+                                <option value="5">5 - Critical</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="onlyFillBlanks" checked>
+                            Only fill blank values
+                        </label>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" id="applyToCategory">Apply to Category</button>
+                    </div>
+                </div>
+            </section>
 
-        <div class="table-container">
-            <table id="resultsTable">
-                <thead>
-                    <tr>
-                        <th>Element ID</th>
-                        <th>Status</th>
-                        <th>Category</th>
-                        <th>Family</th>
-                        <th>Type</th>
-                        <th>Readiness</th>
-                        <th>Groups</th>
-                        <th>Missing</th>
-                        <th>View</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="tableBody"></tbody>
-            </table>
-            <div id="emptyState" class="empty-state">
-                Run an audit to see results
-            </div>
+            <!-- Type Parameters Section -->
+            <section class="editor-section">
+                <div class="section-header">
+                    <h3>Type Parameters</h3>
+                </div>
+                <div id="typeInfo" class="type-info">
+                    <p class="placeholder-text">Select an element to edit type parameters</p>
+                </div>
+                <div id="typeParamsForm" class="params-form hidden">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Manufacturer</label>
+                            <input type="text" id="type_Manufacturer" placeholder="Manufacturer name">
+                        </div>
+                        <div class="form-group">
+                            <label>Model</label>
+                            <input type="text" id="type_Model" placeholder="Model number">
+                        </div>
+                        <div class="form-group">
+                            <label>Type Mark</label>
+                            <input type="text" id="type_TypeMark" placeholder="Type mark">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" id="updateType">Update Type</button>
+                        <span id="typeImpact" class="impact-info"></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Computed Values & Helpers Section -->
+            <section class="editor-section">
+                <div class="section-header">
+                    <h3>Computed Values</h3>
+                </div>
+                <div id="computedValues" class="computed-values">
+                    <div class="computed-row">
+                        <span class="computed-label">UniqueId</span>
+                        <span class="computed-value" id="computed_UniqueId">--</span>
+                        <button class="btn-icon" id="copyUniqueId" title="Copy">Copy</button>
+                    </div>
+                    <div class="computed-row">
+                        <span class="computed-label">Level</span>
+                        <span class="computed-value" id="computed_Level">--</span>
+                    </div>
+                    <div class="computed-row">
+                        <span class="computed-label">Room/Space</span>
+                        <span class="computed-value" id="computed_RoomSpace">--</span>
+                    </div>
+                </div>
+                <div class="helper-actions">
+                    <button class="btn-secondary" id="copyUniqueIdToParam">
+                        Copy UniqueId - FM_UniqueAssetId
+                    </button>
+                    <button class="btn-secondary" id="populateLocationSpace">
+                        Populate FM_LocationSpace from Room
+                    </button>
+                </div>
+            </section>
         </div>
     </div>
 
     <script src="app.js"></script>
 </body>
 </html>
-

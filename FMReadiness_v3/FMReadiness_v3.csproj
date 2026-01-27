@@ -20,6 +20,7 @@
         <!-- MVVM -->
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0"/>
         <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3650.58" />
+        <PackageReference Include="System.Text.Json" Version="8.0.4" />
     </ItemGroup>
     
     <ItemGroup>

@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
-using System.Text.RegularExpressions;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using Autodesk.Revit.UI;
@@ -62,9 +62,10 @@ namespace FMReadiness_v3.UI
 
                 WebViewPaneController.RegisterPane(this);
 
-                if (!string.IsNullOrEmpty(_pendingJson))
+                var pendingJson = _pendingJson;
+                if (!string.IsNullOrEmpty(pendingJson))
                 {
-                    PostAuditResults(_pendingJson);
+                    PostAuditResults(pendingJson!);
                     _pendingJson = null;
                 }
             }
@@ -84,22 +85,87 @@ namespace FMReadiness_v3.UI
                 var message = e.WebMessageAsJson;
                 if (string.IsNullOrWhiteSpace(message)) return;
 
-                if (message.IndexOf("get2dViews", StringComparison.OrdinalIgnoreCase) >= 0
-                    && TryExtractInt(message, "elementId", out var elementId))
+                using var doc = JsonDocument.Parse(message);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("action", out var actionProp))
                 {
-                    WebViewPaneController.Request2dViews(elementId);
-                    return;
+                    var action = actionProp.GetString();
+
+                    if (string.Equals(action, "get2dViews", StringComparison.OrdinalIgnoreCase)
+                        && root.TryGetProperty("elementId", out var elementIdProp)
+                        && elementIdProp.TryGetInt32(out var elementId))
+                    {
+                        WebViewPaneController.Request2dViews(elementId);
+                        return;
+                    }
+
+                    if (string.Equals(action, "open2dView", StringComparison.OrdinalIgnoreCase)
+                        && root.TryGetProperty("viewId", out var viewIdProp)
+                        && viewIdProp.TryGetInt32(out var viewId))
+                    {
+                        WebViewPaneController.RequestOpen2dView(viewId);
+                        return;
+                    }
+
+                    if (string.Equals(action, "getSelectedElements", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.GetSelectedElements);
+                        return;
+                    }
+
+                    if (string.Equals(action, "getCategoryStats", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.GetCategoryStats,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "setInstanceParams", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.SetInstanceParams,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "setCategoryParams", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.SetCategoryParams,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "setTypeParams", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.SetTypeParams,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "copyComputedToParam", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.CopyComputedToParam,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "refreshAudit", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestAuditRefresh();
+                        return;
+                    }
                 }
 
-                if (message.IndexOf("open2dView", StringComparison.OrdinalIgnoreCase) >= 0
-                    && TryExtractInt(message, "viewId", out var viewId))
-                {
-                    WebViewPaneController.RequestOpen2dView(viewId);
-                    return;
-                }
-
-                if (message.IndexOf("selectZoom", StringComparison.OrdinalIgnoreCase) >= 0
-                    && TryExtractInt(message, "elementId", out var selectId))
+                if (root.TryGetProperty("type", out var typeProp)
+                    && string.Equals(typeProp.GetString(), "selectZoom", StringComparison.OrdinalIgnoreCase)
+                    && root.TryGetProperty("elementId", out var selectIdProp)
+                    && selectIdProp.TryGetInt32(out var selectId))
                 {
                     WebViewPaneController.RequestSelectZoom(selectId);
                 }
@@ -108,13 +174,6 @@ namespace FMReadiness_v3.UI
             {
                 System.Diagnostics.Debug.WriteLine($"WebMessageReceived error: {ex.Message}");
             }
-        }
-
-        private static bool TryExtractInt(string json, string key, out int value)
-        {
-            value = 0;
-            var match = Regex.Match(json, $"\"{key}\"\\s*:\\s*(\\d+)");
-            return match.Success && int.TryParse(match.Groups[1].Value, out value);
         }
 
         public void PostAuditResults(string json)
