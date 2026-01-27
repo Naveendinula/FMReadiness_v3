@@ -19,6 +19,7 @@
 
         <!-- MVVM -->
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0"/>
+        <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3650.58" />
     </ItemGroup>
     
     <ItemGroup>
@@ -28,6 +29,25 @@
 
     <ItemGroup>
         <Folder Include="Models"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Update="readiness_checklist.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="UI\index.html">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="UI\styles.css">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="UI\app.js">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="System.Runtime.Serialization" />
     </ItemGroup>
 
 </Project>

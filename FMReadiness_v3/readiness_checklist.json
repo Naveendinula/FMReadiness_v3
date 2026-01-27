@@ -1,0 +1,127 @@
+{
+  "OST_MechanicalEquipment": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "AssetTag", "label": "Asset Tag", "scope": "instance", "source": { "type": "name", "value": "Asset Tag" }, "rules": ["unique"] },
+          { "key": "SerialNumber", "label": "Serial Number", "scope": "instance", "source": { "type": "name", "value": "Serial Number" } },
+          { "key": "UniqueId", "label": "UniqueId", "scope": "instance", "source": { "type": "computed", "id": "Element.UniqueId" } },
+          { "key": "FM_Barcode", "label": "Barcode/QR", "scope": "instance", "source": { "type": "name", "value": "FM_Barcode" } },
+          { "key": "FM_UniqueAssetId", "label": "CMMS Asset ID", "scope": "instance", "source": { "type": "name", "value": "FM_UniqueAssetId" } }
+        ]
+      },
+      "MakeModel": {
+        "fields": [
+          { "key": "Manufacturer", "label": "Manufacturer", "scope": "type", "source": { "type": "name", "value": "Manufacturer" } },
+          { "key": "Model", "label": "Model", "scope": "type", "source": { "type": "name", "value": "Model" } },
+          { "key": "TypeMark", "label": "Type Mark", "scope": "type", "source": { "type": "builtin", "id": "ALL_MODEL_TYPE_MARK" } }
+        ]
+      },
+      "InstallWarranty": {
+        "fields": [
+          { "key": "InstallDate", "label": "Installation Date", "scope": "instance", "source": { "type": "name", "value": "FM_InstallationDate" }, "rules": ["date"] },
+          { "key": "WarrantyStart", "label": "Warranty Start", "scope": "instance", "source": { "type": "name", "value": "FM_WarrantyStart" }, "rules": ["date"] },
+          { "key": "WarrantyEnd", "label": "Warranty End", "scope": "instance", "source": { "type": "name", "value": "FM_WarrantyEnd" }, "rules": ["date"] }
+        ]
+      },
+      "FMOps": {
+        "fields": [
+          { "key": "Criticality", "label": "Criticality", "scope": "instance", "source": { "type": "name", "value": "FM_Criticality" } },
+          { "key": "Trade", "label": "Maintainer/Trade", "scope": "instance", "source": { "type": "name", "value": "FM_Trade" } },
+          { "key": "PMTemplateId", "label": "PM Template ID", "scope": "instance", "source": { "type": "name", "value": "FM_PMTemplateId" } },
+          { "key": "PMFrequencyDays", "label": "PM Frequency (Days)", "scope": "instance", "source": { "type": "name", "value": "FM_PMFrequencyDays" } }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Level", "label": "Level", "scope": "instance", "source": { "type": "computed", "id": "Element.LevelName" } },
+          { "key": "SpaceRoom", "label": "Space/Room", "scope": "instance", "source": { "type": "computed", "id": "Element.RoomOrSpace" } },
+          { "key": "FM_Building", "label": "Building", "scope": "instance", "source": { "type": "name", "value": "FM_Building" } },
+          { "key": "FM_LocationSpace", "label": "Location Override", "scope": "instance", "source": { "type": "name", "value": "FM_LocationSpace" } }
+        ]
+      }
+    }
+  },
+  "OST_DuctTerminal": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Mark", "label": "Mark", "scope": "instance", "source": { "type": "name", "value": "Mark" } },
+          { "key": "UniqueId", "label": "UniqueId", "scope": "instance", "source": { "type": "computed", "id": "Element.UniqueId" } },
+          { "key": "FM_Barcode", "label": "Barcode/QR", "scope": "instance", "source": { "type": "name", "value": "FM_Barcode" } },
+          { "key": "FM_UniqueAssetId", "label": "CMMS Asset ID", "scope": "instance", "source": { "type": "name", "value": "FM_UniqueAssetId" } }
+        ]
+      },
+      "MakeModel": {
+        "fields": [
+          { "key": "Manufacturer", "label": "Manufacturer", "scope": "type", "source": { "type": "name", "value": "Manufacturer" } }
+        ]
+      },
+      "InstallWarranty": {
+        "fields": [
+          { "key": "InstallDate", "label": "Installation Date", "scope": "instance", "source": { "type": "name", "value": "FM_InstallationDate" }, "rules": ["date"] },
+          { "key": "WarrantyStart", "label": "Warranty Start", "scope": "instance", "source": { "type": "name", "value": "FM_WarrantyStart" }, "rules": ["date"] },
+          { "key": "WarrantyEnd", "label": "Warranty End", "scope": "instance", "source": { "type": "name", "value": "FM_WarrantyEnd" }, "rules": ["date"] }
+        ]
+      },
+      "FMOps": {
+        "fields": [
+          { "key": "Criticality", "label": "Criticality", "scope": "instance", "source": { "type": "name", "value": "FM_Criticality" } },
+          { "key": "Trade", "label": "Maintainer/Trade", "scope": "instance", "source": { "type": "name", "value": "FM_Trade" } }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Level", "label": "Level", "scope": "instance", "source": { "type": "computed", "id": "Element.LevelName" } },
+          { "key": "SpaceRoom", "label": "Space/Room", "scope": "instance", "source": { "type": "computed", "id": "Element.RoomOrSpace" } },
+          { "key": "FM_Building", "label": "Building", "scope": "instance", "source": { "type": "name", "value": "FM_Building" } }
+        ]
+      }
+    }
+  },
+  "OST_DuctAccessory": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Mark", "label": "Mark", "scope": "instance", "source": { "type": "name", "value": "Mark" } },
+          { "key": "UniqueId", "label": "UniqueId", "scope": "instance", "source": { "type": "computed", "id": "Element.UniqueId" } },
+          { "key": "FM_Barcode", "label": "Barcode/QR", "scope": "instance", "source": { "type": "name", "value": "FM_Barcode" } }
+        ]
+      },
+      "InstallWarranty": {
+        "fields": [
+          { "key": "InstallDate", "label": "Installation Date", "scope": "instance", "source": { "type": "name", "value": "FM_InstallationDate" }, "rules": ["date"] }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Level", "label": "Level", "scope": "instance", "source": { "type": "computed", "id": "Element.LevelName" } },
+          { "key": "SpaceRoom", "label": "Space/Room", "scope": "instance", "source": { "type": "computed", "id": "Element.RoomOrSpace" } }
+        ]
+      }
+    }
+  },
+  "OST_PipeAccessory": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Mark", "label": "Mark", "scope": "instance", "source": { "type": "name", "value": "Mark" } },
+          { "key": "UniqueId", "label": "UniqueId", "scope": "instance", "source": { "type": "computed", "id": "Element.UniqueId" } },
+          { "key": "FM_Barcode", "label": "Barcode/QR", "scope": "instance", "source": { "type": "name", "value": "FM_Barcode" } }
+        ]
+      },
+      "InstallWarranty": {
+        "fields": [
+          { "key": "InstallDate", "label": "Installation Date", "scope": "instance", "source": { "type": "name", "value": "FM_InstallationDate" }, "rules": ["date"] }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Level", "label": "Level", "scope": "instance", "source": { "type": "computed", "id": "Element.LevelName" } },
+          { "key": "SpaceRoom", "label": "Space/Room", "scope": "instance", "source": { "type": "computed", "id": "Element.RoomOrSpace" } }
+        ]
+      }
+    }
+  }
+}
+

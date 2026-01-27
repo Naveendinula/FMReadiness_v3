@@ -1,0 +1,367 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.IO;
+using System.Runtime.Serialization.Json;
+using System.Text;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
+using FMReadiness_v3.Services;
+using FMReadiness_v3.UI.ExternalEvents;
+
+namespace FMReadiness_v3.UI.Panes
+{
+    public static class WebViewPaneController
+    {
+        private static AuditWebPane? _paneInstance;
+        private static SelectZoomExternalEventHandler? _selectZoomHandler;
+        private static ExternalEvent? _selectZoomEvent;
+        private static Get2dViewsExternalEventHandler? _get2dViewsHandler;
+        private static ExternalEvent? _get2dViewsEvent;
+        private static Open2dViewExternalEventHandler? _open2dViewHandler;
+        private static ExternalEvent? _open2dViewEvent;
+        private static string? _cachedJson;
+
+        public static void Initialize()
+        {
+            _selectZoomHandler = new SelectZoomExternalEventHandler();
+            _selectZoomEvent = ExternalEvent.Create(_selectZoomHandler);
+
+            _get2dViewsHandler = new Get2dViewsExternalEventHandler();
+            _get2dViewsEvent = ExternalEvent.Create(_get2dViewsHandler);
+
+            _open2dViewHandler = new Open2dViewExternalEventHandler();
+            _open2dViewEvent = ExternalEvent.Create(_open2dViewHandler);
+        }
+
+        public static void RegisterPane(AuditWebPane pane)
+        {
+            _paneInstance = pane;
+
+            if (!string.IsNullOrEmpty(_cachedJson))
+            {
+                _paneInstance.PostAuditResults(_cachedJson);
+            }
+        }
+
+        public static void RequestSelectZoom(int elementId)
+        {
+            if (_selectZoomHandler == null || _selectZoomEvent == null) return;
+
+            _selectZoomHandler.PendingElementId = elementId;
+            _selectZoomEvent.Raise();
+        }
+
+        public static void Request2dViews(int elementId)
+        {
+            if (_get2dViewsHandler == null || _get2dViewsEvent == null) return;
+
+            _get2dViewsHandler.PendingElementId = elementId;
+            _get2dViewsEvent.Raise();
+        }
+
+        public static void RequestOpen2dView(int viewId)
+        {
+            if (_open2dViewHandler == null || _open2dViewEvent == null) return;
+
+            _open2dViewHandler.PendingViewId = viewId;
+            _open2dViewEvent.Raise();
+        }
+
+        internal static void Post2dViewOptions(int elementId, IReadOnlyList<ViewOption> views)
+        {
+            if (_paneInstance == null) return;
+
+            var dto = new TwoDViewOptionsDto
+            {
+                type = "2dViewOptions",
+                elementId = elementId,
+                views = views.Select(v => new ViewDto
+                {
+                    viewId = v.ViewId,
+                    name = v.Name,
+                    viewType = v.ViewType
+                }).ToList()
+            };
+
+            var json = SerializeToJson(dto);
+            _paneInstance.PostAuditResults(json);
+        }
+
+        public static void UpdateFromReport(AuditService.AuditReport report)
+        {
+            var dto = new AuditResultsDto
+            {
+                type = "auditResults",
+                summary = new SummaryDto
+                {
+                    overallReadinessPercent = Math.Round(report.AverageReadinessScore * 100, 0),
+                    fullyReady = report.FullyReadyAssets,
+                    totalAudited = report.TotalAuditedAssets,
+                    groupScores = report.AverageGroupScores.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => (int)Math.Round(kvp.Value * 100))
+                },
+                rows = new List<RowDto>()
+            };
+
+            foreach (var result in report.ElementResults)
+            {
+                dto.rows.Add(new RowDto
+                {
+                    elementId = result.ElementId,
+                    category = result.Category,
+                    family = result.Family,
+                    type = result.Type,
+                    missingCount = result.MissingCount,
+                    readinessPercent = (int)Math.Round(result.ReadinessScore * 100),
+                    missingParams = result.MissingParams,
+                    groupScores = result.GroupScores.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => (int)Math.Round(kvp.Value * 100))
+                });
+            }
+
+            var json = SerializeToJson(dto);
+
+            _cachedJson = json;
+
+            _paneInstance?.PostAuditResults(json);
+        }
+
+        internal class ViewOption
+        {
+            public int ViewId { get; }
+            public string Name { get; }
+            public string ViewType { get; }
+
+            public ViewOption(int viewId, string name, string viewType)
+            {
+                ViewId = viewId;
+                Name = name;
+                ViewType = viewType;
+            }
+        }
+
+        private static string SerializeToJson<T>(T value)
+        {
+            var settings = new DataContractJsonSerializerSettings
+            {
+                UseSimpleDictionaryFormat = true
+            };
+            var serializer = new DataContractJsonSerializer(typeof(T), settings);
+            using var stream = new MemoryStream();
+            serializer.WriteObject(stream, value);
+            return Encoding.UTF8.GetString(stream.ToArray());
+        }
+
+        private static int GetElementIdValue(ElementId id)
+        {
+#if REVIT2026_OR_GREATER
+            return unchecked((int)id.Value);
+#else
+            return id.IntegerValue;
+#endif
+        }
+
+        private class AuditResultsDto
+        {
+            public string type { get; set; } = "auditResults";
+            public SummaryDto? summary { get; set; }
+            public List<RowDto> rows { get; set; } = new();
+        }
+
+        private class SummaryDto
+        {
+            public double overallReadinessPercent { get; set; }
+            public int fullyReady { get; set; }
+            public int totalAudited { get; set; }
+            public Dictionary<string, int> groupScores { get; set; } = new();
+        }
+
+        private class RowDto
+        {
+            public int elementId { get; set; }
+            public string category { get; set; } = string.Empty;
+            public string family { get; set; } = string.Empty;
+            public string type { get; set; } = string.Empty;
+            public int missingCount { get; set; }
+            public int readinessPercent { get; set; }
+            public string missingParams { get; set; } = string.Empty;
+            public Dictionary<string, int> groupScores { get; set; } = new();
+        }
+
+        private class TwoDViewOptionsDto
+        {
+            public string type { get; set; } = "2dViewOptions";
+            public int elementId { get; set; }
+            public List<ViewDto> views { get; set; } = new();
+        }
+
+        private class ViewDto
+        {
+            public int viewId { get; set; }
+            public string name { get; set; } = string.Empty;
+            public string viewType { get; set; } = string.Empty;
+        }
+
+        private class Get2dViewsExternalEventHandler : IExternalEventHandler
+        {
+            public int? PendingElementId { get; set; }
+
+            public void Execute(UIApplication app)
+            {
+                if (PendingElementId == null) return;
+                var uidoc = app.ActiveUIDocument;
+                if (uidoc == null) return;
+                var doc = uidoc.Document;
+
+                var elementId = new ElementId(PendingElementId.Value);
+                var element = doc.GetElement(elementId);
+                PendingElementId = null;
+                if (element == null) return;
+
+                var levelId = GetElementLevel(element, doc);
+                if (levelId == null || levelId == ElementId.InvalidElementId)
+                {
+                    var allPlanViews = new FilteredElementCollector(doc)
+                        .OfClass(typeof(ViewPlan))
+                        .Cast<ViewPlan>()
+                        .Where(v => !v.IsTemplate)
+                        .Where(v => v.ViewType == ViewType.FloorPlan || v.ViewType == ViewType.CeilingPlan || v.ViewType == ViewType.EngineeringPlan)
+                        .OrderBy(v => v.GenLevel?.Elevation ?? 0)
+                        .ThenBy(v => v.Name)
+                        .Select(v => new ViewOption(GetElementIdValue(v.Id), v.Name, v.ViewType.ToString()))
+                        .ToList();
+
+                    Post2dViewOptions(GetElementIdValue(elementId), allPlanViews);
+                    return;
+                }
+
+                var views = new FilteredElementCollector(doc)
+                    .OfClass(typeof(ViewPlan))
+                    .Cast<ViewPlan>()
+                    .Where(v => !v.IsTemplate)
+                    .Where(v => v.GenLevel != null && v.GenLevel.Id == levelId)
+                    .Where(v => v.ViewType == ViewType.FloorPlan || v.ViewType == ViewType.CeilingPlan || v.ViewType == ViewType.EngineeringPlan)
+                    .Select(v => new ViewOption(GetElementIdValue(v.Id), v.Name, v.ViewType.ToString()))
+                    .ToList();
+
+                Post2dViewOptions(GetElementIdValue(elementId), views);
+            }
+
+            private ElementId? GetElementLevel(Element element, Document doc)
+            {
+                var levelId = element.LevelId;
+                if (levelId != null && levelId != ElementId.InvalidElementId)
+                    return levelId;
+
+                var levelParam = element.get_Parameter(BuiltInParameter.FAMILY_LEVEL_PARAM);
+                if (levelParam != null && levelParam.HasValue)
+                {
+                    var paramLevelId = levelParam.AsElementId();
+                    if (paramLevelId != null && paramLevelId != ElementId.InvalidElementId)
+                        return paramLevelId;
+                }
+
+                levelParam = element.get_Parameter(BuiltInParameter.SCHEDULE_LEVEL_PARAM);
+                if (levelParam != null && levelParam.HasValue)
+                {
+                    var paramLevelId = levelParam.AsElementId();
+                    if (paramLevelId != null && paramLevelId != ElementId.InvalidElementId)
+                        return paramLevelId;
+                }
+
+                levelParam = element.get_Parameter(BuiltInParameter.RBS_START_LEVEL_PARAM);
+                if (levelParam != null && levelParam.HasValue)
+                {
+                    var paramLevelId = levelParam.AsElementId();
+                    if (paramLevelId != null && paramLevelId != ElementId.InvalidElementId)
+                        return paramLevelId;
+                }
+
+                levelParam = element.get_Parameter(BuiltInParameter.INSTANCE_SCHEDULE_ONLY_LEVEL_PARAM);
+                if (levelParam != null && levelParam.HasValue)
+                {
+                    var paramLevelId = levelParam.AsElementId();
+                    if (paramLevelId != null && paramLevelId != ElementId.InvalidElementId)
+                        return paramLevelId;
+                }
+
+                if (element is FamilyInstance fi && fi.Host != null)
+                {
+                    var hostLevelId = GetElementLevel(fi.Host, doc);
+                    if (hostLevelId != null && hostLevelId != ElementId.InvalidElementId)
+                        return hostLevelId;
+                }
+
+                var point = GetElementPoint(element);
+                if (point != null)
+                {
+                    var levels = new FilteredElementCollector(doc)
+                        .OfClass(typeof(Level))
+                        .Cast<Level>()
+                        .OrderBy(l => l.Elevation)
+                        .ToList();
+
+                    Level? bestLevel = null;
+                    foreach (var level in levels)
+                    {
+                        if (level.Elevation <= point.Z + 0.1)
+                            bestLevel = level;
+                        else
+                            break;
+                    }
+
+                    if (bestLevel != null)
+                        return bestLevel.Id;
+
+                    if (levels.Count > 0)
+                        return levels[0].Id;
+                }
+
+                return null;
+            }
+
+            private XYZ? GetElementPoint(Element element)
+            {
+                if (element.Location is LocationPoint lp)
+                    return lp.Point;
+
+                if (element.Location is LocationCurve lc)
+                    return lc.Curve.Evaluate(0.5, true);
+
+                var bb = element.get_BoundingBox(null);
+                if (bb != null)
+                    return (bb.Min + bb.Max) * 0.5;
+
+                return null;
+            }
+
+            public string GetName() => "FMReadiness_v3.Get2dViewsHandler";
+        }
+
+        private class Open2dViewExternalEventHandler : IExternalEventHandler
+        {
+            public int? PendingViewId { get; set; }
+
+            public void Execute(UIApplication app)
+            {
+                if (PendingViewId == null) return;
+                var uidoc = app.ActiveUIDocument;
+                if (uidoc == null) return;
+
+                var viewId = new ElementId(PendingViewId.Value);
+                PendingViewId = null;
+
+                var view = uidoc.Document.GetElement(viewId) as View;
+                if (view == null) return;
+                if (view.IsTemplate) return;
+
+                uidoc.RequestViewChange(view);
+            }
+
+            public string GetName() => "FMReadiness_v3.Open2dViewHandler";
+        }
+    }
+}

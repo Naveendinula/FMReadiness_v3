@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FM Readiness</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>FM Readiness</h1>
+        </header>
+
+        <div class="summary-cards">
+            <div class="card">
+                <div class="card-value" id="overallReadiness">--%</div>
+                <div class="card-label">Readiness</div>
+                <div class="card-sublabel">Overall score</div>
+            </div>
+            <div class="card">
+                <div class="card-value" id="fullyReadyCount">--</div>
+                <div class="card-label">Ready</div>
+                <div class="card-sublabel" id="fullyReadySublabel">-- assets complete</div>
+            </div>
+            <div class="card">
+                <div class="card-value" id="missingCount">--</div>
+                <div class="card-label">Missing Data</div>
+                <div class="card-sublabel" id="missingSublabel">-- assets incomplete</div>
+            </div>
+            <div class="card">
+                <div class="card-value" id="totalCount">--</div>
+                <div class="card-label">Total</div>
+                <div class="card-sublabel">Assets audited</div>
+            </div>
+        </div>
+
+        <div class="group-scores" id="groupScores"></div>
+
+        <div class="controls">
+            <input type="text" id="searchInput" placeholder="Search or filter" />
+            <label class="checkbox-label">
+                <input type="checkbox" id="showMissingOnly" />
+                Show only incomplete
+            </label>
+        </div>
+
+        <div class="table-container">
+            <table id="resultsTable">
+                <thead>
+                    <tr>
+                        <th>Element ID</th>
+                        <th>Status</th>
+                        <th>Category</th>
+                        <th>Family</th>
+                        <th>Type</th>
+                        <th>Readiness</th>
+                        <th>Groups</th>
+                        <th>Missing</th>
+                        <th>View</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+            <div id="emptyState" class="empty-state">
+                Run an audit to see results
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
