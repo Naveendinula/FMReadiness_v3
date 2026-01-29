@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Globalization;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Architecture;
 using Autodesk.Revit.DB.Mechanical;
@@ -338,8 +339,7 @@ namespace FMReadiness_v3.Services
             if (element == null || string.IsNullOrEmpty(bipName))
                 return (false, null);
 
-            BuiltInParameter bip;
-            if (!Enum.TryParse(bipName, out bip))
+            if (!TryParseEnumValue(bipName, out BuiltInParameter bip))
                 return (false, null);
 
             var param = element.get_Parameter(bip);
@@ -395,6 +395,37 @@ namespace FMReadiness_v3.Services
                 return (false, null);
 
             return (true, value);
+        }
+
+        private static bool TryParseEnumValue<TEnum>(string? value, out TEnum result)
+            where TEnum : struct, Enum
+        {
+            result = default;
+            if (string.IsNullOrWhiteSpace(value)) return false;
+
+            try
+            {
+                if (Enum.TryParse(value, out result)) return true;
+            }
+            catch
+            {
+                // Fall through to numeric parsing.
+            }
+
+            if (!long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric))
+                return false;
+
+            var underlying = Enum.GetUnderlyingType(typeof(TEnum));
+            try
+            {
+                var converted = Convert.ChangeType(numeric, underlying, CultureInfo.InvariantCulture);
+                result = (TEnum)Enum.ToObject(typeof(TEnum), converted);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private (bool ok, string value) TryGetComputedField(Element element, string computedId, Document doc)

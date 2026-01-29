@@ -56,7 +56,13 @@ namespace FMReadiness_v3.UI
                     return;
                 }
 
-                WebView.Source = new Uri(indexPath);
+                var indexUri = new Uri(indexPath);
+                var cacheBuster = File.GetLastWriteTimeUtc(indexPath).Ticks;
+                var uriBuilder = new UriBuilder(indexUri)
+                {
+                    Query = $"v={cacheBuster}"
+                };
+                WebView.Source = uriBuilder.Uri;
 
                 _isWebViewReady = true;
 

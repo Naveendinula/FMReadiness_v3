@@ -39,7 +39,9 @@ namespace FMReadiness_v3
 
             panel.AddPushButton<ShowPaneCommand>("FM Pane")
                 .SetToolTip("Show or hide the FM Readiness results pane.");
+
+            panel.AddPushButton<ExportFmSidecarCommand>("Export FM\nSidecar")
+                .SetToolTip("Exports FM parameters as a sidecar JSON file for the DigitalTwin viewer.\n\nThe sidecar file contains FM parameters keyed by IFC GlobalId.\nUpload it alongside your IFC file to show FM data in the viewer.");
         }
     }
 }
-

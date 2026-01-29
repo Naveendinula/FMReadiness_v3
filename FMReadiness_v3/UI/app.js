@@ -402,6 +402,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             content.classList.remove('active');
         });
         document.getElementById(`tab-${tabId}`).classList.add('active');
+
+        if (tabId === 'editor') {
+            requestSelectedElements();
+        }
     });
 });
 

@@ -1,0 +1,17 @@
+PropertySet:	FMReadiness	I	IfcDistributionElement
+FM_Barcode	Text	FM_Barcode
+FM_UniqueAssetId	Text	FM_UniqueAssetId
+FM_InstallationDate	Text	FM_InstallationDate
+FM_WarrantyStart	Text	FM_WarrantyStart
+FM_WarrantyEnd	Text	FM_WarrantyEnd
+FM_Criticality	Text	FM_Criticality
+FM_Trade	Text	FM_Trade
+FM_PMTemplateId	Text	FM_PMTemplateId
+FM_PMFrequencyDays	Integer	FM_PMFrequencyDays
+FM_Building	Text	FM_Building
+FM_LocationSpace	Text	FM_LocationSpace
+
+PropertySet:	FMReadinessType	T	IfcDistributionElementType
+Manufacturer	Text	Manufacturer
+Model	Text	Model
+TypeMark	Text	Type Mark
