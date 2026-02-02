@@ -43,12 +43,16 @@ namespace FMReadiness_v3.Services
             {
                 try
                 {
+                    var fileName = Path.GetFileName(file);
+                    if (string.Equals(fileName, "custom.json", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
                     var preset = LoadPresetFile(file);
                     if (preset != null)
                     {
                         presets.Add(new PresetInfo
                         {
-                            FileName = Path.GetFileName(file),
+                            FileName = fileName,
                             Name = preset.Name ?? Path.GetFileNameWithoutExtension(file),
                             Description = preset.Description ?? string.Empty,
                             Version = preset.Version ?? "1.0.0"
