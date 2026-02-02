@@ -540,6 +540,7 @@ namespace FMReadiness_v3.UI.ExternalEvents
 
             bool includeAliases = true;
             bool replaceCobie = false;
+            bool removeFmAliases = false;
             string mode = "cobie";
             if (!string.IsNullOrEmpty(JsonPayload))
             {
@@ -548,12 +549,19 @@ namespace FMReadiness_v3.UI.ExternalEvents
                     includeAliases = includeAliasesProp.GetBoolean();
                 if (jsonDoc.RootElement.TryGetProperty("replaceCobie", out var replaceCobieProp))
                     replaceCobie = replaceCobieProp.GetBoolean();
+                if (jsonDoc.RootElement.TryGetProperty("removeFmAliases", out var removeFmAliasesProp))
+                    removeFmAliases = removeFmAliasesProp.GetBoolean();
                 if (jsonDoc.RootElement.TryGetProperty("mode", out var modeProp))
                     mode = modeProp.GetString() ?? "cobie";
             }
 
+            if (removeFmAliases)
+            {
+                includeAliases = false;
+            }
+
             var service = new CobieParameterService();
-            var result = service.EnsureParameters(app, doc, preset, includeAliases, replaceCobie);
+            var result = service.EnsureParameters(app, doc, preset, includeAliases, replaceCobie, removeFmAliases);
 
             var message = $"Created {result.Created}, updated {result.UpdatedBindings}, skipped {result.Skipped}.";
             if (result.Removed > 0)

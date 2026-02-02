@@ -24,7 +24,8 @@ namespace FMReadiness_v3.Services
             Document doc,
             CobiePreset preset,
             bool includeAliases,
-            bool removeCobieParameters)
+            bool removeCobieParameters,
+            bool removeFmAliases)
         {
             var result = new EnsureParametersResult();
 
@@ -78,6 +79,10 @@ namespace FMReadiness_v3.Services
                 if (removeCobieParameters)
                 {
                     result.Removed = RemoveParametersByPrefix(doc, "COBie.");
+                }
+                if (removeFmAliases)
+                {
+                    result.Removed += RemoveParametersByPrefix(doc, "FM_");
                 }
 
                 foreach (var tableEntry in preset.Tables)
@@ -198,13 +203,21 @@ namespace FMReadiness_v3.Services
 
             if (definition == null)
             {
+                definition = GetDefinitionFromGroup(group, paramName);
+            }
+
+            if (definition == null)
+            {
                 definition = CreateDefinition(group, paramName, dataType);
                 if (definition == null)
                 {
                     result.Warnings.Add($"Failed to create definition for {paramName}");
                     return;
                 }
+            }
 
+            if (existingBinding == null)
+            {
                 var newBinding = bindingKind == ParamBindingKind.Type
                     ? (Binding)app.Create.NewTypeBinding(categorySet)
                     : app.Create.NewInstanceBinding(categorySet);
@@ -216,45 +229,42 @@ namespace FMReadiness_v3.Services
                 if (map.Insert(definition, newBinding, BuiltInParameterGroup.PG_IDENTITY_DATA))
                     result.Created++;
 #endif
-                return;
-            }
-
-            // Existing binding: ensure type/instance matches and categories are included
-            if (existingBinding != null)
-            {
-                var isTypeBinding = existingBinding is TypeBinding;
-                if (bindingKind == ParamBindingKind.Type && !isTypeBinding)
-                {
-                    result.Warnings.Add($"Parameter '{paramName}' exists as instance; expected type.");
-                    result.Skipped++;
-                    return;
-                }
-                if (bindingKind == ParamBindingKind.Instance && isTypeBinding)
-                {
-                    result.Warnings.Add($"Parameter '{paramName}' exists as type; expected instance.");
-                    result.Skipped++;
-                    return;
-                }
-
-                var merged = MergeCategories(app, existingBinding.Categories, categorySet);
-                if (merged != null)
-                {
-                    var newBinding = bindingKind == ParamBindingKind.Type
-                        ? (Binding)app.Create.NewTypeBinding(merged)
-                        : app.Create.NewInstanceBinding(merged);
-
-#if REVIT2024_OR_GREATER
-                    if (map.ReInsert(definition, newBinding, GroupTypeId.IdentityData))
-                        result.UpdatedBindings++;
-#else
-                    if (map.ReInsert(definition, newBinding, BuiltInParameterGroup.PG_IDENTITY_DATA))
-                        result.UpdatedBindings++;
-#endif
-                }
                 else
                 {
                     result.Skipped++;
                 }
+                return;
+            }
+
+            // Existing binding: ensure type/instance matches and categories are included
+            var isTypeBinding = existingBinding is TypeBinding;
+            if (bindingKind == ParamBindingKind.Type && !isTypeBinding)
+            {
+                result.Warnings.Add($"Parameter '{paramName}' exists as instance; expected type.");
+                result.Skipped++;
+                return;
+            }
+            if (bindingKind == ParamBindingKind.Instance && isTypeBinding)
+            {
+                result.Warnings.Add($"Parameter '{paramName}' exists as type; expected instance.");
+                result.Skipped++;
+                return;
+            }
+
+            var merged = MergeCategories(app, existingBinding.Categories, categorySet);
+            if (merged != null)
+            {
+                var newBinding = bindingKind == ParamBindingKind.Type
+                    ? (Binding)app.Create.NewTypeBinding(merged)
+                    : app.Create.NewInstanceBinding(merged);
+
+#if REVIT2024_OR_GREATER
+                if (map.ReInsert(definition, newBinding, GroupTypeId.IdentityData))
+                    result.UpdatedBindings++;
+#else
+                if (map.ReInsert(definition, newBinding, BuiltInParameterGroup.PG_IDENTITY_DATA))
+                    result.UpdatedBindings++;
+#endif
             }
             else
             {
@@ -276,6 +286,18 @@ namespace FMReadiness_v3.Services
                 options.UserModifiable = true;
                 options.Visible = true;
                 return group.Definitions.Create(options);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private Definition? GetDefinitionFromGroup(DefinitionGroup group, string name)
+        {
+            try
+            {
+                return group.Definitions.get_Item(name);
             }
             catch
             {

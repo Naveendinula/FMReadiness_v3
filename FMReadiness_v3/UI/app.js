@@ -627,12 +627,15 @@ function ensureCobieParameters() {
     if (window.chrome && window.chrome.webview) {
         const includeAliases = document.getElementById('writeAliases')?.checked ?? true;
         const presetFile = document.getElementById('presetDropdown')?.value;
+        const removeFmAliases = document.getElementById('removeFmAliases')?.checked ?? false;
+        const effectiveIncludeAliases = includeAliases && !removeFmAliases;
         window.chrome.webview.postMessage({
             action: 'ensureCobieParameters',
-            includeAliases: includeAliases,
+            includeAliases: effectiveIncludeAliases,
             presetFile: presetFile,
             mode: 'cobie',
-            replaceCobie: false
+            replaceCobie: false,
+            removeFmAliases: removeFmAliases
         });
     }
 }
