@@ -36,6 +36,12 @@
         <None Update="readiness_checklist.json">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+        <None Update="cobie-core-checklist.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Presets\*.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
         <None Update="UI\index.html">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>

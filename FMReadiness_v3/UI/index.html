@@ -11,15 +11,25 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
+        <!-- Header with Preset Selector -->
         <header class="header">
             <h1>FM Readiness</h1>
+            <div class="preset-selector">
+                <label for="presetDropdown">Preset:</label>
+                <select id="presetDropdown">
+                    <option value="cobie-core.json">COBie Core</option>
+                    <option value="fm-legacy.json">FM Legacy</option>
+                    <option value="custom.json">Custom</option>
+                </select>
+                <button class="btn-icon btn-sm" id="refreshPresets" title="Refresh presets">⟳</button>
+            </div>
         </header>
 
         <!-- Tab Navigation -->
         <div class="tab-nav">
             <button class="tab-btn active" data-tab="audit">Audit Results</button>
             <button class="tab-btn" data-tab="editor">Parameter Editor</button>
+            <button class="tab-btn" data-tab="cobie">COBie Validation</button>
         </div>
 
         <!-- Tab: Audit Results -->
@@ -91,7 +101,17 @@
 
         <!-- Tab: Parameter Editor -->
         <div id="tab-editor" class="tab-content">
-            <!-- Selected Elements Section -->
+            <!-- Editor Mode Toggle -->
+            <div class="editor-mode-toggle">
+                <button class="mode-btn active" data-mode="cobie">COBie Editor</button>
+                <button class="mode-btn" data-mode="legacy">Legacy FM Editor</button>
+                <label class="checkbox-label write-aliases-toggle">
+                    <input type="checkbox" id="writeAliases" checked>
+                    Write to FM_ aliases
+                </label>
+            </div>
+
+            <!-- Selected Elements Section (shared) -->
             <section class="editor-section">
                 <div class="section-header">
                     <h3>Selected Elements</h3>
@@ -100,7 +120,120 @@
                 <div id="selectedElementInfo" class="selection-info">
                     <p class="placeholder-text">Select elements in Revit and click Refresh</p>
                 </div>
-                <div id="instanceParamsForm" class="params-form hidden">
+            </section>
+
+            <!-- COBie Editor Mode -->
+            <div id="cobieEditorMode" class="editor-mode active">
+                <div class="ensure-bar">
+                    <button class="btn-secondary btn-sm" id="ensureCobieParams">Ensure COBie Parameters</button>
+                    <span class="ensure-note">Adds COBie fields to Identity Data.</span>
+                </div>
+                <div id="cobieEnsureNotice" class="ensure-notice">
+                    Please click <strong>Ensure COBie Parameters</strong> to enable editing.
+                </div>
+                <!-- COBie Instance Fields -->
+                <section class="editor-section">
+                    <div class="section-header">
+                        <h3>Component Fields <span class="field-count" id="cobieInstanceFieldCount"></span></h3>
+                    </div>
+                    <div id="cobieInstanceForm" class="params-form hidden">
+                        <div class="form-grid" id="cobieInstanceFieldsGrid">
+                            <!-- Dynamically populated from preset -->
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" id="applyCobieToSelected">Apply to Selected</button>
+                            <span class="form-hint">Fields with <span class="required-badge">●</span> are required for COBie</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- COBie Type Fields -->
+                <section class="editor-section">
+                    <div class="section-header">
+                        <h3>Type Fields <span class="field-count" id="cobieTypeFieldCount"></span></h3>
+                    </div>
+                    <div id="cobieTypeInfo" class="type-info">
+                        <p class="placeholder-text">Select an element to edit type parameters</p>
+                    </div>
+                    <div id="cobieTypeForm" class="params-form hidden">
+                        <div class="form-grid" id="cobieTypeFieldsGrid">
+                            <!-- Dynamically populated from preset -->
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" id="applyCobieType">Update Type</button>
+                            <span id="cobieTypeImpact" class="impact-info"></span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- COBie Bulk Fill -->
+                <section class="editor-section">
+                    <div class="section-header">
+                        <h3>Bulk Fill by Category</h3>
+                    </div>
+                    <div class="category-selector">
+                        <select id="cobieBulkCategory">
+                            <option value="">Select Category</option>
+                            <option value="OST_MechanicalEquipment">Mechanical Equipment</option>
+                            <option value="OST_DuctTerminal">Duct Terminals</option>
+                            <option value="OST_DuctAccessory">Duct Accessories</option>
+                            <option value="OST_PipeAccessory">Pipe Accessories</option>
+                            <option value="OST_Rooms">Rooms</option>
+                            <option value="OST_MEPSpaces">MEP Spaces</option>
+                        </select>
+                        <span id="cobieCategoryCount" class="category-count"></span>
+                    </div>
+                    <div id="cobieBulkForm" class="params-form">
+                        <div class="form-grid" id="cobieBulkFieldsGrid">
+                            <!-- Dynamically populated with common fields -->
+                        </div>
+                        <div class="form-options">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="cobieOnlyFillBlanks" checked>
+                                Only fill blank values
+                            </label>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" id="applyCobieToCategory">Apply to Category</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Computed Values -->
+                <section class="editor-section">
+                    <div class="section-header">
+                        <h3>Computed Values</h3>
+                    </div>
+                    <div id="cobieComputedValues" class="computed-values">
+                        <div class="computed-row">
+                            <span class="computed-label">UniqueId</span>
+                            <span class="computed-value" id="cobie_computed_UniqueId">--</span>
+                            <button class="btn-icon btn-sm" id="copyToSerialNumber" title="Copy to SerialNumber">→ SerialNumber</button>
+                        </div>
+                        <div class="computed-row">
+                            <span class="computed-label">Level</span>
+                            <span class="computed-value" id="cobie_computed_Level">--</span>
+                        </div>
+                        <div class="computed-row">
+                            <span class="computed-label">Room/Space</span>
+                            <span class="computed-value" id="cobie_computed_RoomSpace">--</span>
+                            <button class="btn-icon btn-sm" id="copyToSpace" title="Copy to Space">→ Space</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Legacy FM Editor Mode -->
+            <div id="legacyEditorMode" class="editor-mode">
+                <div class="ensure-bar">
+                    <button class="btn-secondary btn-sm" id="ensureLegacyParams">Ensure Legacy FM Parameters</button>
+                    <span class="ensure-note">Replaces COBie parameters in Identity Data.</span>
+                </div>
+                <section class="editor-section">
+                    <div class="section-header">
+                        <h3>Instance Parameters (Legacy FM)</h3>
+                    </div>
+                    <div id="instanceParamsForm" class="params-form hidden">
                     <div class="form-grid">
                         <div class="form-group">
                             <label>FM_Barcode</label>
@@ -160,10 +293,10 @@
                 </div>
             </section>
 
-            <!-- Category Bulk Fill Section -->
+            <!-- Category Bulk Fill Section (Legacy) -->
             <section class="editor-section">
                 <div class="section-header">
-                    <h3>Category Bulk Fill</h3>
+                    <h3>Category Bulk Fill (Legacy)</h3>
                 </div>
                 <div class="category-selector">
                     <select id="bulkCategory">
@@ -213,10 +346,10 @@
                 </div>
             </section>
 
-            <!-- Type Parameters Section -->
+            <!-- Type Parameters Section (Legacy) -->
             <section class="editor-section">
                 <div class="section-header">
-                    <h3>Type Parameters</h3>
+                    <h3>Type Parameters (Legacy)</h3>
                 </div>
                 <div id="typeInfo" class="type-info">
                     <p class="placeholder-text">Select an element to edit type parameters</p>
@@ -243,10 +376,10 @@
                 </div>
             </section>
 
-            <!-- Computed Values & Helpers Section -->
+            <!-- Computed Values & Helpers Section (Legacy) -->
             <section class="editor-section">
                 <div class="section-header">
-                    <h3>Computed Values</h3>
+                    <h3>Computed Values (Legacy)</h3>
                 </div>
                 <div id="computedValues" class="computed-values">
                     <div class="computed-row">
@@ -265,11 +398,87 @@
                 </div>
                 <div class="helper-actions">
                     <button class="btn-secondary" id="copyUniqueIdToParam">
-                        Copy UniqueId - FM_UniqueAssetId
+                        Copy UniqueId → FM_UniqueAssetId
                     </button>
                     <button class="btn-secondary" id="populateLocationSpace">
                         Populate FM_LocationSpace from Room
                     </button>
+                </div>
+            </section>
+            </div><!-- End Legacy Editor Mode -->
+        </div>
+
+        <!-- Tab: COBie Validation -->
+        <div id="tab-cobie" class="tab-content">
+            <!-- COBie Readiness Summary -->
+            <section class="editor-section">
+                <div class="section-header">
+                    <h3>COBie Readiness Summary</h3>
+                    <button class="btn-primary btn-sm" id="validateCobieBtn">Validate Selected</button>
+                </div>
+                <div id="cobieReadinessSummary" class="cobie-summary">
+                    <div class="cobie-summary-cards">
+                        <div class="cobie-card">
+                            <div class="cobie-card-value" id="cobieOverallScore">--%</div>
+                            <div class="cobie-card-label">Overall Score</div>
+                        </div>
+                        <div class="cobie-card">
+                            <div class="cobie-card-value" id="cobieReadyCount">--</div>
+                            <div class="cobie-card-label">COBie Ready</div>
+                        </div>
+                        <div class="cobie-card">
+                            <div class="cobie-card-value" id="cobieRequiredScore">--%</div>
+                            <div class="cobie-card-label">Required Fields</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Validation Results -->
+            <section class="editor-section">
+                <div class="section-header">
+                    <h3>Validation Results</h3>
+                </div>
+                <div id="cobieValidationResults" class="validation-results">
+                    <p class="placeholder-text">Select elements in Revit and click "Validate Selected" to check COBie readiness.</p>
+                </div>
+            </section>
+
+            <!-- Uniqueness Violations -->
+            <section class="editor-section">
+                <div class="section-header">
+                    <h3>Uniqueness Violations</h3>
+                </div>
+                <div id="uniquenessViolations" class="violations-list">
+                    <p class="placeholder-text">No uniqueness violations detected.</p>
+                </div>
+            </section>
+
+            <!-- Missing Required Fields -->
+            <section class="editor-section">
+                <div class="section-header">
+                    <h3>Missing Required Fields</h3>
+                </div>
+                <div id="missingRequiredFields" class="missing-fields-list">
+                    <p class="placeholder-text">Run validation to see missing required fields.</p>
+                </div>
+            </section>
+
+            <!-- COBie Field Reference -->
+            <section class="editor-section collapsible">
+                <div class="section-header" id="cobieFieldRefHeader">
+                    <h3>COBie Field Reference</h3>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="cobieFieldReference" class="field-reference collapsed">
+                    <div class="field-ref-group" id="componentFieldsRef">
+                        <h4>Component Fields</h4>
+                        <div class="field-ref-list"></div>
+                    </div>
+                    <div class="field-ref-group" id="typeFieldsRef">
+                        <h4>Type Fields</h4>
+                        <div class="field-ref-list"></div>
+                    </div>
                 </div>
             </section>
         </div>

@@ -1,0 +1,763 @@
+{
+  "name": "COBie Core",
+  "version": "1.0.0",
+  "description": "Core COBie 2.4 fields for FM handover (Component, Type, Space, Level, Facility)",
+  "writeAliases": true,
+  "categories": [
+    "OST_MechanicalEquipment",
+    "OST_DuctTerminal",
+    "OST_DuctAccessory",
+    "OST_PipeAccessory",
+    "OST_PlumbingFixtures",
+    "OST_ElectricalEquipment",
+    "OST_ElectricalFixtures",
+    "OST_LightingFixtures",
+    "OST_FireAlarmDevices",
+    "OST_Furniture"
+  ],
+  "tables": {
+    "Component": {
+      "description": "Individual asset instances (COBie Component sheet)",
+      "fields": [
+        {
+          "cobieKey": "Component.Name",
+          "label": "Component Name",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Mark",
+          "aliasParams": ["Asset Tag", "FM_AssetTag"],
+          "rules": ["unique"],
+          "group": "Identity",
+          "cobieColumn": "Name"
+        },
+        {
+          "cobieKey": "Component.CreatedBy",
+          "label": "Created By",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Component.CreatedBy",
+          "aliasParams": ["FM_CreatedBy"],
+          "rules": [],
+          "group": "Metadata",
+          "cobieColumn": "CreatedBy"
+        },
+        {
+          "cobieKey": "Component.CreatedOn",
+          "label": "Created On",
+          "scope": "instance",
+          "dataType": "date",
+          "required": true,
+          "revitParam": "COBie.Component.CreatedOn",
+          "aliasParams": ["FM_CreatedOn"],
+          "rules": ["date"],
+          "group": "Metadata",
+          "cobieColumn": "CreatedOn"
+        },
+        {
+          "cobieKey": "Component.TypeName",
+          "label": "Type Name",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "computed": { "source": "Element.TypeName" },
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "TypeName"
+        },
+        {
+          "cobieKey": "Component.Space",
+          "label": "Space",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "computed": { "source": "Element.RoomOrSpace" },
+          "revitParam": "COBie.Component.Space",
+          "aliasParams": ["FM_LocationSpace"],
+          "rules": [],
+          "group": "Location",
+          "cobieColumn": "Space"
+        },
+        {
+          "cobieKey": "Component.Description",
+          "label": "Description",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "COBie.Component.Description",
+          "aliasParams": ["Comments", "FM_Description"],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "Description"
+        },
+        {
+          "cobieKey": "Component.SerialNumber",
+          "label": "Serial Number",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "Serial Number",
+          "aliasParams": ["FM_SerialNumber", "COBie.Component.SerialNumber"],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "SerialNumber"
+        },
+        {
+          "cobieKey": "Component.InstallationDate",
+          "label": "Installation Date",
+          "scope": "instance",
+          "dataType": "date",
+          "required": false,
+          "revitParam": "COBie.Component.InstallationDate",
+          "aliasParams": ["FM_InstallationDate"],
+          "rules": ["date"],
+          "group": "InstallWarranty",
+          "cobieColumn": "InstallationDate"
+        },
+        {
+          "cobieKey": "Component.WarrantyStartDate",
+          "label": "Warranty Start Date",
+          "scope": "instance",
+          "dataType": "date",
+          "required": false,
+          "revitParam": "COBie.Component.WarrantyStartDate",
+          "aliasParams": ["FM_WarrantyStart"],
+          "rules": ["date"],
+          "group": "InstallWarranty",
+          "cobieColumn": "WarrantyStartDate"
+        },
+        {
+          "cobieKey": "Component.TagNumber",
+          "label": "Tag/Barcode",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "COBie.Component.TagNumber",
+          "aliasParams": ["FM_Barcode", "Asset Tag"],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "TagNumber"
+        },
+        {
+          "cobieKey": "Component.BarCode",
+          "label": "Barcode",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "COBie.Component.BarCode",
+          "aliasParams": ["FM_Barcode"],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "BarCode"
+        },
+        {
+          "cobieKey": "Component.AssetIdentifier",
+          "label": "CMMS Asset ID",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "COBie.Component.AssetIdentifier",
+          "aliasParams": ["FM_UniqueAssetId"],
+          "rules": ["unique"],
+          "group": "Identity",
+          "cobieColumn": "AssetIdentifier"
+        }
+      ]
+    },
+    "Type": {
+      "description": "Product/equipment types (COBie Type sheet)",
+      "fields": [
+        {
+          "cobieKey": "Type.Name",
+          "label": "Type Name",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "computed": { "source": "Element.TypeName" },
+          "rules": ["unique"],
+          "group": "Identity",
+          "cobieColumn": "Name"
+        },
+        {
+          "cobieKey": "Type.CreatedBy",
+          "label": "Created By",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Type.CreatedBy",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Metadata",
+          "cobieColumn": "CreatedBy"
+        },
+        {
+          "cobieKey": "Type.CreatedOn",
+          "label": "Created On",
+          "scope": "type",
+          "dataType": "date",
+          "required": true,
+          "revitParam": "COBie.Type.CreatedOn",
+          "aliasParams": [],
+          "rules": ["date"],
+          "group": "Metadata",
+          "cobieColumn": "CreatedOn"
+        },
+        {
+          "cobieKey": "Type.Category",
+          "label": "Category",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Type.Category",
+          "aliasParams": ["OmniClass Number", "Assembly Code"],
+          "rules": [],
+          "group": "Classification",
+          "cobieColumn": "Category"
+        },
+        {
+          "cobieKey": "Type.Description",
+          "label": "Type Description",
+          "scope": "type",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "Type Comments",
+          "aliasParams": ["COBie.Type.Description"],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "Description"
+        },
+        {
+          "cobieKey": "Type.Manufacturer",
+          "label": "Manufacturer",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Manufacturer",
+          "aliasParams": ["COBie.Type.Manufacturer"],
+          "rules": [],
+          "group": "MakeModel",
+          "cobieColumn": "Manufacturer"
+        },
+        {
+          "cobieKey": "Type.ModelNumber",
+          "label": "Model Number",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Model",
+          "aliasParams": ["COBie.Type.ModelNumber"],
+          "rules": [],
+          "group": "MakeModel",
+          "cobieColumn": "ModelNumber"
+        },
+        {
+          "cobieKey": "Type.WarrantyDurationParts",
+          "label": "Warranty Duration (Parts)",
+          "scope": "type",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "COBie.Type.WarrantyDurationParts",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Warranty",
+          "cobieColumn": "WarrantyDurationParts"
+        },
+        {
+          "cobieKey": "Type.WarrantyDurationLabor",
+          "label": "Warranty Duration (Labor)",
+          "scope": "type",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "COBie.Type.WarrantyDurationLabor",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Warranty",
+          "cobieColumn": "WarrantyDurationLabor"
+        },
+        {
+          "cobieKey": "Type.WarrantyDurationUnit",
+          "label": "Warranty Duration Unit",
+          "scope": "type",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "COBie.Type.WarrantyDurationUnit",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Warranty",
+          "cobieColumn": "WarrantyDurationUnit"
+        },
+        {
+          "cobieKey": "Type.ReplacementCost",
+          "label": "Replacement Cost",
+          "scope": "type",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "Cost",
+          "aliasParams": ["COBie.Type.ReplacementCost"],
+          "rules": [],
+          "group": "Lifecycle",
+          "cobieColumn": "ReplacementCost"
+        },
+        {
+          "cobieKey": "Type.ExpectedLife",
+          "label": "Expected Life (Years)",
+          "scope": "type",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "COBie.Type.ExpectedLife",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Lifecycle",
+          "cobieColumn": "ExpectedLife"
+        },
+        {
+          "cobieKey": "Type.NominalLength",
+          "label": "Nominal Length",
+          "scope": "type",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "COBie.Type.NominalLength",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Dimensions",
+          "cobieColumn": "NominalLength"
+        },
+        {
+          "cobieKey": "Type.NominalWidth",
+          "label": "Nominal Width",
+          "scope": "type",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "COBie.Type.NominalWidth",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Dimensions",
+          "cobieColumn": "NominalWidth"
+        },
+        {
+          "cobieKey": "Type.NominalHeight",
+          "label": "Nominal Height",
+          "scope": "type",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "COBie.Type.NominalHeight",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Dimensions",
+          "cobieColumn": "NominalHeight"
+        },
+        {
+          "cobieKey": "Type.ModelReference",
+          "label": "Model Reference",
+          "scope": "type",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "URL",
+          "aliasParams": ["COBie.Type.ModelReference"],
+          "rules": [],
+          "group": "Reference",
+          "cobieColumn": "ModelReference"
+        },
+        {
+          "cobieKey": "Type.AssetType",
+          "label": "Asset Type",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Type.AssetType",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Classification",
+          "cobieColumn": "AssetType",
+          "defaultValue": "Fixed"
+        }
+      ]
+    },
+    "Space": {
+      "description": "Spatial elements (Rooms/Spaces) (COBie Space sheet)",
+      "fields": [
+        {
+          "cobieKey": "Space.Name",
+          "label": "Space Name",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "computed": { "source": "Space.Name" },
+          "rules": ["unique"],
+          "group": "Identity",
+          "cobieColumn": "Name"
+        },
+        {
+          "cobieKey": "Space.CreatedBy",
+          "label": "Created By",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Space.CreatedBy",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Metadata",
+          "cobieColumn": "CreatedBy"
+        },
+        {
+          "cobieKey": "Space.CreatedOn",
+          "label": "Created On",
+          "scope": "instance",
+          "dataType": "date",
+          "required": true,
+          "revitParam": "COBie.Space.CreatedOn",
+          "aliasParams": [],
+          "rules": ["date"],
+          "group": "Metadata",
+          "cobieColumn": "CreatedOn"
+        },
+        {
+          "cobieKey": "Space.Category",
+          "label": "Category",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Space.Category",
+          "aliasParams": ["Room:Department"],
+          "rules": [],
+          "group": "Classification",
+          "cobieColumn": "Category"
+        },
+        {
+          "cobieKey": "Space.FloorName",
+          "label": "Floor/Level",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "computed": { "source": "Space.LevelName" },
+          "rules": [],
+          "group": "Location",
+          "cobieColumn": "FloorName"
+        },
+        {
+          "cobieKey": "Space.Description",
+          "label": "Description",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "Comments",
+          "aliasParams": ["COBie.Space.Description"],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "Description"
+        },
+        {
+          "cobieKey": "Space.RoomTag",
+          "label": "Room Number",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "computed": { "source": "Space.Number" },
+          "rules": ["unique"],
+          "group": "Identity",
+          "cobieColumn": "RoomTag"
+        },
+        {
+          "cobieKey": "Space.UsableHeight",
+          "label": "Usable Height",
+          "scope": "instance",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "Unbounded Height",
+          "aliasParams": ["COBie.Space.UsableHeight"],
+          "rules": [],
+          "group": "Dimensions",
+          "cobieColumn": "UsableHeight"
+        },
+        {
+          "cobieKey": "Space.GrossArea",
+          "label": "Gross Area",
+          "scope": "instance",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "Area",
+          "aliasParams": ["COBie.Space.GrossArea"],
+          "rules": [],
+          "group": "Dimensions",
+          "cobieColumn": "GrossArea"
+        },
+        {
+          "cobieKey": "Space.NetArea",
+          "label": "Net Area",
+          "scope": "instance",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "COBie.Space.NetArea",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Dimensions",
+          "cobieColumn": "NetArea"
+        }
+      ]
+    },
+    "Floor": {
+      "description": "Building levels/floors (COBie Floor sheet)",
+      "fields": [
+        {
+          "cobieKey": "Floor.Name",
+          "label": "Floor Name",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "computed": { "source": "Level.Name" },
+          "rules": ["unique"],
+          "group": "Identity",
+          "cobieColumn": "Name"
+        },
+        {
+          "cobieKey": "Floor.CreatedBy",
+          "label": "Created By",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Floor.CreatedBy",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Metadata",
+          "cobieColumn": "CreatedBy"
+        },
+        {
+          "cobieKey": "Floor.CreatedOn",
+          "label": "Created On",
+          "scope": "instance",
+          "dataType": "date",
+          "required": true,
+          "revitParam": "COBie.Floor.CreatedOn",
+          "aliasParams": [],
+          "rules": ["date"],
+          "group": "Metadata",
+          "cobieColumn": "CreatedOn"
+        },
+        {
+          "cobieKey": "Floor.Category",
+          "label": "Category",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Floor.Category",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Classification",
+          "cobieColumn": "Category",
+          "defaultValue": "Floor"
+        },
+        {
+          "cobieKey": "Floor.Description",
+          "label": "Description",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "COBie.Floor.Description",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "Description"
+        },
+        {
+          "cobieKey": "Floor.Elevation",
+          "label": "Elevation",
+          "scope": "instance",
+          "dataType": "number",
+          "required": false,
+          "computed": { "source": "Level.Elevation" },
+          "rules": [],
+          "group": "Dimensions",
+          "cobieColumn": "Elevation"
+        },
+        {
+          "cobieKey": "Floor.Height",
+          "label": "Height",
+          "scope": "instance",
+          "dataType": "number",
+          "required": false,
+          "revitParam": "COBie.Floor.Height",
+          "aliasParams": ["Computation Height"],
+          "rules": [],
+          "group": "Dimensions",
+          "cobieColumn": "Height"
+        }
+      ]
+    },
+    "Facility": {
+      "description": "Building/Site information (COBie Facility sheet)",
+      "fields": [
+        {
+          "cobieKey": "Facility.Name",
+          "label": "Facility Name",
+          "scope": "project",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Project Name",
+          "aliasParams": ["COBie.Facility.Name"],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "Name"
+        },
+        {
+          "cobieKey": "Facility.CreatedBy",
+          "label": "Created By",
+          "scope": "project",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Author",
+          "aliasParams": ["COBie.Facility.CreatedBy"],
+          "rules": [],
+          "group": "Metadata",
+          "cobieColumn": "CreatedBy"
+        },
+        {
+          "cobieKey": "Facility.CreatedOn",
+          "label": "Created On",
+          "scope": "project",
+          "dataType": "date",
+          "required": true,
+          "revitParam": "COBie.Facility.CreatedOn",
+          "aliasParams": [],
+          "rules": ["date"],
+          "group": "Metadata",
+          "cobieColumn": "CreatedOn"
+        },
+        {
+          "cobieKey": "Facility.Category",
+          "label": "Category",
+          "scope": "project",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Building Type",
+          "aliasParams": ["COBie.Facility.Category"],
+          "rules": [],
+          "group": "Classification",
+          "cobieColumn": "Category"
+        },
+        {
+          "cobieKey": "Facility.ProjectName",
+          "label": "Project Name",
+          "scope": "project",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Project Name",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "ProjectName"
+        },
+        {
+          "cobieKey": "Facility.SiteName",
+          "label": "Site Name",
+          "scope": "project",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Project Address",
+          "aliasParams": ["COBie.Facility.SiteName"],
+          "rules": [],
+          "group": "Location",
+          "cobieColumn": "SiteName"
+        },
+        {
+          "cobieKey": "Facility.Description",
+          "label": "Description",
+          "scope": "project",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "Project Issue Date",
+          "aliasParams": ["COBie.Facility.Description"],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "Description"
+        },
+        {
+          "cobieKey": "Facility.AreaUnits",
+          "label": "Area Units",
+          "scope": "project",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Facility.AreaUnits",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Units",
+          "cobieColumn": "AreaUnits",
+          "defaultValue": "squarefeet"
+        },
+        {
+          "cobieKey": "Facility.LinearUnits",
+          "label": "Linear Units",
+          "scope": "project",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "COBie.Facility.LinearUnits",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Units",
+          "cobieColumn": "LinearUnits",
+          "defaultValue": "feet"
+        }
+      ]
+    }
+  },
+  "fmOpsExtensions": {
+    "description": "Extended FM operations fields not part of COBie core but useful for CMMS integration",
+    "fields": [
+      {
+        "cobieKey": "FMOps.Criticality",
+        "label": "Criticality",
+        "scope": "instance",
+        "dataType": "string",
+        "required": false,
+        "revitParam": "COBie.FMOps.Criticality",
+        "aliasParams": ["FM_Criticality"],
+        "rules": [],
+        "group": "FMOps"
+      },
+      {
+        "cobieKey": "FMOps.Trade",
+        "label": "Maintainer/Trade",
+        "scope": "instance",
+        "dataType": "string",
+        "required": false,
+        "revitParam": "COBie.FMOps.Trade",
+        "aliasParams": ["FM_Trade"],
+        "rules": [],
+        "group": "FMOps"
+      },
+      {
+        "cobieKey": "FMOps.PMTemplateId",
+        "label": "PM Template ID",
+        "scope": "instance",
+        "dataType": "string",
+        "required": false,
+        "revitParam": "COBie.FMOps.PMTemplateId",
+        "aliasParams": ["FM_PMTemplateId"],
+        "rules": [],
+        "group": "FMOps"
+      },
+      {
+        "cobieKey": "FMOps.PMFrequencyDays",
+        "label": "PM Frequency (Days)",
+        "scope": "instance",
+        "dataType": "number",
+        "required": false,
+        "revitParam": "COBie.FMOps.PMFrequencyDays",
+        "aliasParams": ["FM_PMFrequencyDays"],
+        "rules": [],
+        "group": "FMOps"
+      },
+      {
+        "cobieKey": "FMOps.Building",
+        "label": "Building",
+        "scope": "instance",
+        "dataType": "string",
+        "required": false,
+        "revitParam": "COBie.FMOps.Building",
+        "aliasParams": ["FM_Building"],
+        "rules": [],
+        "group": "Location"
+      }
+    ]
+  }
+}

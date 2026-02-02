@@ -6,6 +6,23 @@ window.auditData = {
     rows: []
 };
 
+// Preset state
+window.presetState = {
+    currentPreset: null,
+    availablePresets: [],
+    presetFields: null
+};
+
+const COBIE_PRESET_FILE = 'cobie-core.json';
+const LEGACY_PRESET_FILE = 'fm-legacy.json';
+
+// COBie validation state
+window.cobieState = {
+    validationResults: null,
+    uniquenessViolations: [],
+    parametersEnsured: false
+};
+
 // DOM Elements
 const overallReadinessEl = document.getElementById('overallReadiness');
 const fullyReadyCountEl = document.getElementById('fullyReadyCount');
@@ -34,6 +51,39 @@ if (window.chrome && window.chrome.webview) {
 
         if (msg && msg.type === '2dViewOptions') {
             receive2dViewOptions(msg);
+            return;
+        }
+
+        // Preset messages
+        if (msg && msg.type === 'availablePresets') {
+            receiveAvailablePresets(msg);
+            return;
+        }
+
+        if (msg && msg.type === 'presetLoaded') {
+            receivePresetLoaded(msg);
+            return;
+        }
+
+        if (msg && msg.type === 'presetFields') {
+            receivePresetFields(msg);
+            return;
+        }
+
+        // COBie validation messages
+        if (msg && msg.type === 'cobieReadinessResult') {
+            receiveCobieReadinessResult(msg);
+            return;
+        }
+
+        if (msg && msg.type === 'cobieParametersEnsured') {
+            receiveCobieParametersEnsured(msg);
+            return;
+        }
+
+        if (msg && msg.type === 'legacyParametersEnsured') {
+            receiveLegacyParametersEnsured(msg);
+            return;
         }
     });
 }
@@ -415,8 +465,468 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 let editorState = {
     selectedElements: [],
     currentTypeId: null,
-    currentTypeInfo: null
+    currentTypeInfo: null,
+    editorMode: 'cobie', // 'cobie' or 'legacy'
+    cobieFields: {
+        instance: [],
+        type: []
+    }
 };
+
+// ========================================
+// Editor Mode Toggle
+// ========================================
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        editorState.editorMode = mode;
+        
+        // Update button states
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Toggle editor modes visibility
+        document.querySelectorAll('.editor-mode').forEach(m => m.classList.remove('active'));
+        const modeEl = document.getElementById(mode === 'cobie' ? 'cobieEditorMode' : 'legacyEditorMode');
+        if (modeEl) modeEl.classList.add('active');
+
+        switchPresetForMode(mode);
+        // Re-render fields if COBie mode
+        if (mode === 'cobie' && window.presetState.presetFields) {
+            renderCobieEditorFields();
+        }
+    });
+});
+
+function switchPresetForMode(mode) {
+    const desired = mode === 'legacy' ? LEGACY_PRESET_FILE : COBIE_PRESET_FILE;
+    const dropdown = document.getElementById('presetDropdown');
+    if (dropdown && dropdown.value !== desired) {
+        dropdown.value = desired;
+        loadPreset(desired);
+    }
+}
+
+// ========================================
+// COBie Editor Field Rendering
+// ========================================
+function renderCobieEditorFields() {
+    const presetFields = window.presetState.presetFields;
+    if (!presetFields) return;
+    
+    const instanceGrid = document.getElementById('cobieInstanceFieldsGrid');
+    const typeGrid = document.getElementById('cobieTypeFieldsGrid');
+    const bulkGrid = document.getElementById('cobieBulkFieldsGrid');
+    
+    if (!instanceGrid || !typeGrid) return;
+    
+    // Clear existing fields
+    instanceGrid.innerHTML = '';
+    typeGrid.innerHTML = '';
+    if (bulkGrid) bulkGrid.innerHTML = '';
+    
+    editorState.cobieFields.instance = [];
+    editorState.cobieFields.type = [];
+    
+    // Render component (instance) fields
+    const componentGroups = Array.isArray(presetFields.componentGroups)
+        ? presetFields.componentGroups
+        : Object.entries(presetFields.componentGroups || {}).map(([name, fields]) => ({ name, fields }));
+    let instanceCount = 0;
+    
+    componentGroups.forEach(group => {
+        const fields = group.fields || [];
+        fields.forEach(field => {
+            const fieldHtml = createCobieFieldInput(field, 'instance');
+            instanceGrid.insertAdjacentHTML('beforeend', fieldHtml);
+            editorState.cobieFields.instance.push(field);
+            instanceCount++;
+        });
+    });
+    
+    // Update instance field count
+    const instanceCountEl = document.getElementById('cobieInstanceFieldCount');
+    if (instanceCountEl) {
+        instanceCountEl.textContent = `(${instanceCount} fields)`;
+    }
+    
+    // Render type fields
+    const typeGroups = Array.isArray(presetFields.typeGroups)
+        ? presetFields.typeGroups
+        : Object.entries(presetFields.typeGroups || {}).map(([name, fields]) => ({ name, fields }));
+    let typeCount = 0;
+    
+    typeGroups.forEach(group => {
+        const fields = group.fields || [];
+        fields.forEach(field => {
+            const fieldHtml = createCobieFieldInput(field, 'type');
+            typeGrid.insertAdjacentHTML('beforeend', fieldHtml);
+            editorState.cobieFields.type.push(field);
+            typeCount++;
+        });
+    });
+    
+    // Update type field count
+    const typeCountEl = document.getElementById('cobieTypeFieldCount');
+    if (typeCountEl) {
+        typeCountEl.textContent = `(${typeCount} fields)`;
+    }
+    
+    // Render bulk fill fields (common fields only)
+    if (bulkGrid) {
+        const commonFields = editorState.cobieFields.instance.filter(f => 
+            ['InstallationDate', 'WarrantyStartDate', 'Space'].some(k => f.cobieKey?.includes(k))
+        );
+        commonFields.forEach(field => {
+            const fieldHtml = createCobieFieldInput(field, 'bulk');
+            bulkGrid.insertAdjacentHTML('beforeend', fieldHtml);
+        });
+    }
+
+    applyCobieEditorEnabledState();
+}
+
+function createCobieFieldInput(field, prefix) {
+    const isRequired = field.required === true;
+    const cobieKey = field.cobieKey || field.key || '';
+    const fieldId = `${prefix}_${cobieKey.replace(/\./g, '_')}`;
+    const label = field.label || cobieKey;
+    const dataType = field.dataType || 'string';
+    const aliases = field.aliasParams || [];
+    
+    let inputHtml = '';
+    let placeholder = field.revitParam || cobieKey;
+    
+    if (dataType === 'date') {
+        placeholder = 'YYYY-MM-DD';
+        inputHtml = `<input type="text" id="${fieldId}" placeholder="${placeholder}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" class="cobie-field-input">`;
+    } else if (dataType === 'number') {
+        inputHtml = `<input type="number" id="${fieldId}" placeholder="${placeholder}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" class="cobie-field-input">`;
+    } else if (field.options && field.options.length > 0) {
+        const optionsHtml = field.options.map(o => `<option value="${o}">${o}</option>`).join('');
+        inputHtml = `<select id="${fieldId}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" class="cobie-field-input"><option value="">Select...</option>${optionsHtml}</select>`;
+    } else {
+        inputHtml = `<input type="text" id="${fieldId}" placeholder="${placeholder}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" class="cobie-field-input">`;
+    }
+    
+    const aliasHint = aliases.length > 0 ? `<span class="alias-hint">Also: ${aliases.slice(0, 2).join(', ')}${aliases.length > 2 ? '...' : ''}</span>` : '';
+    
+    return `
+        <div class="form-group ${isRequired ? 'required' : ''}">
+            <label for="${fieldId}">${label}</label>
+            ${inputHtml}
+            ${aliasHint}
+        </div>
+    `;
+}
+
+// ========================================
+// COBie Editor - Apply Values
+// ========================================
+function ensureCobieParameters() {
+    if (window.chrome && window.chrome.webview) {
+        const includeAliases = document.getElementById('writeAliases')?.checked ?? true;
+        const presetFile = document.getElementById('presetDropdown')?.value;
+        window.chrome.webview.postMessage({
+            action: 'ensureCobieParameters',
+            includeAliases: includeAliases,
+            presetFile: presetFile,
+            mode: 'cobie',
+            replaceCobie: false
+        });
+    }
+}
+
+document.getElementById('ensureCobieParams')?.addEventListener('click', () => {
+    ensureCobieParameters();
+});
+
+function ensureLegacyParameters() {
+    if (window.chrome && window.chrome.webview) {
+        const includeAliases = document.getElementById('writeAliases')?.checked ?? true;
+        window.chrome.webview.postMessage({
+            action: 'ensureCobieParameters',
+            includeAliases: includeAliases,
+            presetFile: LEGACY_PRESET_FILE,
+            mode: 'legacy',
+            replaceCobie: true
+        });
+    }
+}
+
+document.getElementById('ensureLegacyParams')?.addEventListener('click', () => {
+    ensureLegacyParameters();
+});
+
+function receiveCobieParametersEnsured(msg) {
+    if (msg && msg.success) {
+        window.cobieState.parametersEnsured = true;
+        applyCobieEditorEnabledState();
+    }
+}
+
+function receiveLegacyParametersEnsured(msg) {
+    if (msg && msg.success) {
+        window.cobieState.parametersEnsured = false;
+        applyCobieEditorEnabledState();
+    }
+}
+
+function requireCobieEnsured() {
+    if (window.cobieState.parametersEnsured) return true;
+    showToast('Click "Ensure COBie Parameters" before editing COBie fields.', 'error');
+    return false;
+}
+
+function applyCobieEditorEnabledState() {
+    const enabled = window.cobieState.parametersEnsured;
+    document.querySelectorAll('.cobie-field-input').forEach(input => {
+        input.disabled = !enabled;
+    });
+
+    const ids = [
+        'applyCobieToSelected',
+        'applyCobieType',
+        'applyCobieToCategory',
+        'copyToSerialNumber',
+        'copyToSpace'
+    ];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !enabled;
+    });
+
+    const notice = document.getElementById('cobieEnsureNotice');
+    if (notice) {
+        notice.classList.toggle('hidden', enabled);
+    }
+}
+
+function setCobieFieldValues(elementIds, fieldValues, writeAliases) {
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'setCobieFieldValues',
+            elementIds: elementIds,
+            fieldValues: fieldValues,
+            writeAliases: writeAliases
+        });
+    }
+}
+
+document.getElementById('applyCobieToSelected')?.addEventListener('click', () => {
+    if (!requireCobieEnsured()) return;
+    if (editorState.selectedElements.length === 0) {
+        showToast('No elements selected', 'error');
+        return;
+    }
+    
+    const fieldValues = collectCobieFieldValues('instance');
+    if (Object.keys(fieldValues).length === 0) {
+        showToast('No values to apply', 'warning');
+        return;
+    }
+    
+    const writeAliases = document.getElementById('writeAliases')?.checked ?? true;
+    const elementIds = editorState.selectedElements.map(e => e.elementId);
+    
+    setCobieFieldValues(elementIds, fieldValues, writeAliases);
+});
+
+document.getElementById('applyCobieType')?.addEventListener('click', () => {
+    if (!requireCobieEnsured()) return;
+    if (!editorState.currentTypeId) {
+        showToast('No type selected', 'error');
+        return;
+    }
+    
+    const fieldValues = collectCobieFieldValues('type');
+    if (Object.keys(fieldValues).length === 0) {
+        showToast('No values to apply', 'warning');
+        return;
+    }
+    
+    const writeAliases = document.getElementById('writeAliases')?.checked ?? true;
+    
+    // Use type-specific action
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'setCobieTypeFieldValues',
+            typeId: editorState.currentTypeId,
+            fieldValues: fieldValues,
+            writeAliases: writeAliases
+        });
+    }
+});
+
+document.getElementById('applyCobieToCategory')?.addEventListener('click', () => {
+    if (!requireCobieEnsured()) return;
+    const category = document.getElementById('cobieBulkCategory')?.value;
+    if (!category) {
+        showToast('Select a category first', 'error');
+        return;
+    }
+    
+    const fieldValues = collectCobieFieldValues('bulk');
+    if (Object.keys(fieldValues).length === 0) {
+        showToast('No values to apply', 'warning');
+        return;
+    }
+    
+    const onlyBlanks = document.getElementById('cobieOnlyFillBlanks')?.checked ?? true;
+    const writeAliases = document.getElementById('writeAliases')?.checked ?? true;
+    
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'setCobieCategoryFieldValues',
+            category: category,
+            fieldValues: fieldValues,
+            onlyBlanks: onlyBlanks,
+            writeAliases: writeAliases
+        });
+    }
+});
+
+function collectCobieFieldValues(prefix) {
+    const fieldValues = {};
+    const inputs = document.querySelectorAll(`#cobie${capitalize(prefix)}FieldsGrid .cobie-field-input, #cobie${capitalize(prefix)}Form .cobie-field-input`);
+    
+    // Fallback for bulk fields which might be in a different container
+    const bulkInputs = prefix === 'bulk' ? document.querySelectorAll('#cobieBulkFieldsGrid .cobie-field-input') : [];
+    const allInputs = inputs.length > 0 ? inputs : bulkInputs;
+    
+    allInputs.forEach(input => {
+        const value = input.value?.trim();
+        if (value) {
+            const cobieKey = input.dataset.cobieKey;
+            const revitParam = input.dataset.revitParam;
+            if (cobieKey || revitParam) {
+                fieldValues[cobieKey || revitParam] = {
+                    value: value,
+                    cobieKey: cobieKey,
+                    revitParam: revitParam
+                };
+            }
+        }
+    });
+    
+    return fieldValues;
+}
+
+function capitalize(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// ========================================
+// COBie Editor - Populate from Selection
+// ========================================
+function populateCobieFieldsFromElement(element) {
+    if (!element) return;
+    
+    const instanceParams = element.instanceParams || {};
+    const typeParams = element.typeParams || {};
+    const cobieInstanceParams = element.cobieInstanceParams || element.cobieParams || {};
+    const cobieTypeParams = element.cobieTypeParams || {};
+    
+    // Populate instance fields
+    editorState.cobieFields.instance.forEach(field => {
+        const fieldId = `instance_${(field.cobieKey || '').replace(/\./g, '_')}`;
+        const input = document.getElementById(fieldId);
+        if (!input) return;
+        
+        // Try COBie param first, then revitParam, then aliases
+        let value = cobieInstanceParams[field.cobieKey] || 
+                    instanceParams[field.revitParam] ||
+                    (field.aliasParams || []).map(a => instanceParams[a]).find(v => v);
+        
+        input.value = value || '';
+        
+        // Update visual state
+        if (field.required && !value) {
+            input.classList.add('missing-required');
+            input.classList.remove('has-value');
+        } else if (value) {
+            input.classList.add('has-value');
+            input.classList.remove('missing-required');
+        } else {
+            input.classList.remove('has-value', 'missing-required');
+        }
+    });
+    
+    // Populate type fields
+    editorState.cobieFields.type.forEach(field => {
+        const fieldId = `type_${(field.cobieKey || '').replace(/\./g, '_')}`;
+        const input = document.getElementById(fieldId);
+        if (!input) return;
+        
+        let value = cobieTypeParams[field.cobieKey] || typeParams[field.revitParam] || typeParams[field.cobieKey] ||
+                    (field.aliasParams || []).map(a => typeParams[a]).find(v => v);
+        
+        input.value = value || '';
+    });
+    
+    // Update computed values for COBie editor
+    const computed = element.computed || {};
+    const cobieUniqueId = document.getElementById('cobie_computed_UniqueId');
+    const cobieLevel = document.getElementById('cobie_computed_Level');
+    const cobieRoomSpace = document.getElementById('cobie_computed_RoomSpace');
+    
+    if (cobieUniqueId) cobieUniqueId.textContent = computed.UniqueId || '--';
+    if (cobieLevel) cobieLevel.textContent = computed.Level || '--';
+    if (cobieRoomSpace) cobieRoomSpace.textContent = computed.RoomSpace || '--';
+}
+
+// COBie category stats
+document.getElementById('cobieBulkCategory')?.addEventListener('change', (e) => {
+    const category = e.target.value;
+    if (category) {
+        requestCategoryStats(category);
+    } else {
+        document.getElementById('cobieCategoryCount').textContent = '';
+    }
+});
+
+// Copy computed values for COBie
+document.getElementById('copyToSerialNumber')?.addEventListener('click', () => {
+    if (!requireCobieEnsured()) return;
+    if (editorState.selectedElements.length === 0) {
+        showToast('No elements selected', 'error');
+        return;
+    }
+    
+    const elementIds = editorState.selectedElements.map(e => e.elementId);
+    const writeAliases = document.getElementById('writeAliases')?.checked ?? true;
+    
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'copyComputedToCobieParam',
+            elementIds: elementIds,
+            sourceField: 'UniqueId',
+            targetCobieKey: 'Component.SerialNumber',
+            writeAliases: writeAliases
+        });
+    }
+});
+
+document.getElementById('copyToSpace')?.addEventListener('click', () => {
+    if (!requireCobieEnsured()) return;
+    if (editorState.selectedElements.length === 0) {
+        showToast('No elements selected', 'error');
+        return;
+    }
+    
+    const elementIds = editorState.selectedElements.map(e => e.elementId);
+    const writeAliases = document.getElementById('writeAliases')?.checked ?? true;
+    
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'copyComputedToCobieParam',
+            elementIds: elementIds,
+            sourceField: 'RoomSpace',
+            targetCobieKey: 'Component.Space',
+            writeAliases: writeAliases
+        });
+    }
+});
 
 // ========================================
 // Parameter Editor - Message Handling
@@ -520,11 +1030,22 @@ function receiveSelectedElementsData(msg) {
     const typeInfoEl = document.getElementById('typeInfo');
     const typeFormEl = document.getElementById('typeParamsForm');
     
+    // COBie editor elements
+    const cobieInstanceForm = document.getElementById('cobieInstanceForm');
+    const cobieTypeInfo = document.getElementById('cobieTypeInfo');
+    const cobieTypeForm = document.getElementById('cobieTypeForm');
+    
     if (elements.length === 0) {
         infoEl.innerHTML = '<p class="placeholder-text">No elements selected. Select elements in Revit and click Refresh.</p>';
-        formEl.classList.add('hidden');
+        formEl?.classList.add('hidden');
         typeInfoEl.innerHTML = '<p class="placeholder-text">Select an element to edit its type parameters</p>';
-        typeFormEl.classList.add('hidden');
+        typeFormEl?.classList.add('hidden');
+        
+        // COBie editor
+        cobieInstanceForm?.classList.add('hidden');
+        if (cobieTypeInfo) cobieTypeInfo.innerHTML = '<p class="placeholder-text">Select an element to edit type parameters</p>';
+        cobieTypeForm?.classList.add('hidden');
+        
         clearComputedValues();
         return;
     }
@@ -547,7 +1068,8 @@ function receiveSelectedElementsData(msg) {
     }
     
     infoEl.innerHTML = badgesHtml;
-    formEl.classList.remove('hidden');
+    formEl?.classList.remove('hidden');
+    cobieInstanceForm?.classList.remove('hidden');
     
     // Pre-fill instance params if single element
     if (elements.length === 1) {
@@ -565,7 +1087,7 @@ function receiveSelectedElementsData(msg) {
         document.getElementById('edit_FM_Building').value = ip.FM_Building || '';
         document.getElementById('edit_FM_LocationSpace').value = ip.FM_LocationSpace || '';
         
-        // Update type info
+        // Update type info (legacy)
         if (el.typeId && el.typeName) {
             editorState.currentTypeId = el.typeId;
             editorState.currentTypeInfo = el;
@@ -575,13 +1097,26 @@ function receiveSelectedElementsData(msg) {
                     <span>(${el.typeInstanceCount || '?'} instances)</span>
                 </div>
             `;
-            typeFormEl.classList.remove('hidden');
+            typeFormEl?.classList.remove('hidden');
             
             const tp = el.typeParams || {};
             document.getElementById('type_Manufacturer').value = tp.Manufacturer || '';
             document.getElementById('type_Model').value = tp.Model || '';
             document.getElementById('type_TypeMark').value = tp.TypeMark || '';
             document.getElementById('typeImpact').textContent = `Will update ${el.typeInstanceCount || '?'} instances`;
+            
+            // COBie type info
+            if (cobieTypeInfo) {
+                cobieTypeInfo.innerHTML = `
+                    <div class="type-badge">
+                        <span class="type-name">${el.typeName}</span>
+                        <span>(${el.typeInstanceCount || '?'} instances)</span>
+                    </div>
+                `;
+            }
+            cobieTypeForm?.classList.remove('hidden');
+            const cobieTypeImpact = document.getElementById('cobieTypeImpact');
+            if (cobieTypeImpact) cobieTypeImpact.textContent = `Will update ${el.typeInstanceCount || '?'} instances`;
         }
         
         // Update computed values
@@ -589,21 +1124,53 @@ function receiveSelectedElementsData(msg) {
         document.getElementById('computed_UniqueId').textContent = computed.UniqueId || '--';
         document.getElementById('computed_Level').textContent = computed.Level || '--';
         document.getElementById('computed_RoomSpace').textContent = computed.RoomSpace || '--';
+        
+        // Populate COBie editor fields
+        populateCobieFieldsFromElement(el);
     } else {
         // Multiple selection - clear fields
         clearInstanceForm();
         typeInfoEl.innerHTML = '<p class="placeholder-text">Select a single element to edit type parameters</p>';
-        typeFormEl.classList.add('hidden');
+        typeFormEl?.classList.add('hidden');
+        
+        if (cobieTypeInfo) cobieTypeInfo.innerHTML = '<p class="placeholder-text">Select a single element to edit type parameters</p>';
+        cobieTypeForm?.classList.add('hidden');
+        
         clearComputedValues();
+        clearCobieInstanceForm();
     }
 }
 
+function clearCobieInstanceForm() {
+    document.querySelectorAll('.cobie-field-input').forEach(input => {
+        input.value = '';
+        input.classList.remove('has-value', 'missing-required');
+    });
+    
+    // Clear COBie computed values
+    const cobieUniqueId = document.getElementById('cobie_computed_UniqueId');
+    const cobieLevel = document.getElementById('cobie_computed_Level');
+    const cobieRoomSpace = document.getElementById('cobie_computed_RoomSpace');
+    if (cobieUniqueId) cobieUniqueId.textContent = '--';
+    if (cobieLevel) cobieLevel.textContent = '--';
+    if (cobieRoomSpace) cobieRoomSpace.textContent = '--';
+}
+
 function receiveCategoryStats(msg) {
+    // Legacy category count
     const countEl = document.getElementById('categoryCount');
     if (msg.count !== undefined) {
         countEl.textContent = `${msg.count} elements`;
     } else {
         countEl.textContent = '';
+    }
+    
+    // COBie category count
+    const cobieCountEl = document.getElementById('cobieCategoryCount');
+    if (cobieCountEl && msg.count !== undefined) {
+        cobieCountEl.textContent = `${msg.count} elements`;
+    } else if (cobieCountEl) {
+        cobieCountEl.textContent = '';
     }
 }
 
@@ -791,6 +1358,287 @@ document.getElementById('populateLocationSpace')?.addEventListener('click', () =
     const elementIds = editorState.selectedElements.map(e => e.elementId);
     copyComputedToParam(elementIds, 'RoomSpace', 'FM_LocationSpace');
 });
+
+// ========================================
+// Preset Management
+// ========================================
+function requestAvailablePresets() {
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'getAvailablePresets'
+        });
+    }
+}
+
+function loadPreset(fileName) {
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'loadPreset',
+            fileName: fileName
+        });
+    }
+}
+
+function requestPresetFields() {
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'getPresetFields'
+        });
+    }
+}
+
+function receiveAvailablePresets(msg) {
+    const presets = msg.presets || [];
+    const currentPreset = msg.currentPreset || '';
+    
+    window.presetState.availablePresets = presets;
+    
+    const dropdown = document.getElementById('presetDropdown');
+    if (!dropdown) return;
+    
+    dropdown.innerHTML = '';
+    presets.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.fileName;
+        opt.textContent = p.name;
+        opt.title = p.description;
+        if (p.fileName === currentPreset) {
+            opt.selected = true;
+        }
+        dropdown.appendChild(opt);
+    });
+}
+
+function receivePresetLoaded(msg) {
+    if (msg.success) {
+        window.presetState.currentPreset = msg.preset;
+        window.cobieState.parametersEnsured = false;
+        applyCobieEditorEnabledState();
+        showToast(`Loaded preset: ${msg.preset.name}`, 'success');
+        requestPresetFields();
+    } else {
+        showToast('Failed to load preset', 'error');
+    }
+}
+
+function receivePresetFields(msg) {
+    window.presetState.presetFields = {
+        presetName: msg.presetName,
+        componentGroups: msg.componentGroups,
+        typeGroups: msg.typeGroups
+    };
+    
+    // Render both COBie field reference and editor fields
+    renderCobieFieldReference();
+    renderCobieEditorFields();
+}
+
+// Preset dropdown change
+document.getElementById('presetDropdown')?.addEventListener('change', (e) => {
+    const fileName = e.target.value;
+    if (fileName) {
+        loadPreset(fileName);
+    }
+});
+
+// Refresh presets button
+document.getElementById('refreshPresets')?.addEventListener('click', () => {
+    requestAvailablePresets();
+});
+
+// ========================================
+// COBie Validation
+// ========================================
+function validateCobieReadiness() {
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'validateCobieReadiness'
+        });
+    }
+}
+
+function receiveCobieReadinessResult(msg) {
+    window.cobieState.validationResults = msg.elements || [];
+    window.cobieState.uniquenessViolations = msg.uniquenessViolations || [];
+    
+    renderCobieSummary(msg.summary);
+    renderCobieValidationResults(msg.elements);
+    renderUniquenessViolations(msg.uniquenessViolations);
+    renderMissingRequiredFields(msg.elements);
+}
+
+function renderCobieSummary(summary) {
+    if (!summary) return;
+    
+    const overallScoreEl = document.getElementById('cobieOverallScore');
+    const readyCountEl = document.getElementById('cobieReadyCount');
+    const requiredScoreEl = document.getElementById('cobieRequiredScore');
+    
+    if (overallScoreEl) {
+        overallScoreEl.textContent = `${Math.round(summary.averageScore)}%`;
+        overallScoreEl.className = 'cobie-card-value ' + getReadinessClass(summary.averageScore);
+    }
+    
+    if (readyCountEl) {
+        readyCountEl.textContent = `${summary.cobieReadyCount}/${summary.totalElements}`;
+    }
+    
+    if (requiredScoreEl) {
+        const avgRequired = window.cobieState.validationResults.length > 0
+            ? window.cobieState.validationResults.reduce((acc, e) => acc + e.requiredScore, 0) / window.cobieState.validationResults.length
+            : 0;
+        requiredScoreEl.textContent = `${Math.round(avgRequired)}%`;
+        requiredScoreEl.className = 'cobie-card-value ' + getReadinessClass(avgRequired);
+    }
+}
+
+function renderCobieValidationResults(elements) {
+    const container = document.getElementById('cobieValidationResults');
+    if (!container) return;
+    
+    if (!elements || elements.length === 0) {
+        container.innerHTML = '<p class="placeholder-text">No validation results. Select elements and click "Validate Selected".</p>';
+        return;
+    }
+    
+    const html = elements.map(el => {
+        const statusClass = el.cobieReady ? 'status-ready' : 'status-incomplete';
+        const statusText = el.cobieReady ? '✓ COBie Ready' : '⚠ Incomplete';
+        const errorCount = el.validationErrors ? el.validationErrors.length : 0;
+        
+        return `
+            <div class="validation-item ${statusClass}">
+                <div class="validation-header">
+                    <span class="element-id">${el.elementId}</span>
+                    <span class="element-category">${escapeHtml(el.category)}</span>
+                    <span class="validation-status">${statusText}</span>
+                    <span class="validation-score">${el.overallScore}%</span>
+                </div>
+                <div class="validation-details">
+                    <span>Required: ${el.requiredFields.populated}/${el.requiredFields.total}</span>
+                    <span>Optional: ${el.optionalFields.populated}/${el.optionalFields.total}</span>
+                    ${errorCount > 0 ? `<span class="error-count">${errorCount} errors</span>` : ''}
+                </div>
+                ${errorCount > 0 ? `
+                    <div class="validation-errors">
+                        ${el.validationErrors.map(err => `<span class="validation-error">${escapeHtml(err.message)}</span>`).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+    
+    container.innerHTML = html;
+}
+
+function renderUniquenessViolations(violations) {
+    const container = document.getElementById('uniquenessViolations');
+    if (!container) return;
+    
+    if (!violations || violations.length === 0) {
+        container.innerHTML = '<p class="placeholder-text">No uniqueness violations detected.</p>';
+        return;
+    }
+    
+    const html = violations.map(v => `
+        <div class="violation-item">
+            <span class="violation-field">${escapeHtml(v.field)}</span>
+            <span class="violation-elements">Duplicate elements: ${v.elementIds.join(', ')}</span>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+function renderMissingRequiredFields(elements) {
+    const container = document.getElementById('missingRequiredFields');
+    if (!container) return;
+    
+    if (!elements || elements.length === 0) {
+        container.innerHTML = '<p class="placeholder-text">Run validation to see missing required fields.</p>';
+        return;
+    }
+    
+    const missingByField = {};
+    elements.forEach(el => {
+        if (el.missingRequired) {
+            el.missingRequired.forEach(field => {
+                if (!missingByField[field]) {
+                    missingByField[field] = [];
+                }
+                missingByField[field].push(el.elementId);
+            });
+        }
+    });
+    
+    const fields = Object.keys(missingByField);
+    if (fields.length === 0) {
+        container.innerHTML = '<p class="placeholder-text">All required fields are populated! ✓</p>';
+        return;
+    }
+    
+    const html = fields.map(field => `
+        <div class="missing-field-item">
+            <span class="missing-field-name">${escapeHtml(field)}</span>
+            <span class="missing-field-count">${missingByField[field].length} elements</span>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+function renderCobieFieldReference() {
+    const fields = window.presetState.presetFields;
+    if (!fields) return;
+    
+    const componentContainer = document.querySelector('#componentFieldsRef .field-ref-list');
+    const typeContainer = document.querySelector('#typeFieldsRef .field-ref-list');
+    
+    if (componentContainer && fields.componentGroups) {
+        componentContainer.innerHTML = fields.componentGroups.map(group => `
+            <div class="field-group">
+                <h5>${escapeHtml(group.name)}</h5>
+                ${group.fields.map(f => `
+                    <div class="field-ref-item ${f.required ? 'required' : ''}">
+                        <span class="field-label">${escapeHtml(f.label)}</span>
+                        <span class="field-param">${escapeHtml(f.revitParam || f.computedSource || '-')}</span>
+                        ${f.required ? '<span class="required-badge">Required</span>' : ''}
+                    </div>
+                `).join('')}
+            </div>
+        `).join('');
+    }
+    
+    if (typeContainer && fields.typeGroups) {
+        const typeFields = fields.typeGroups.flatMap(g => g.fields);
+        typeContainer.innerHTML = typeFields.map(f => `
+            <div class="field-ref-item ${f.required ? 'required' : ''}">
+                <span class="field-label">${escapeHtml(f.label)}</span>
+                <span class="field-param">${escapeHtml(f.revitParam || '-')}</span>
+                ${f.required ? '<span class="required-badge">Required</span>' : ''}
+            </div>
+        `).join('');
+    }
+}
+
+// Validate COBie button
+document.getElementById('validateCobieBtn')?.addEventListener('click', () => {
+    validateCobieReadiness();
+});
+
+// Collapsible field reference
+document.getElementById('cobieFieldRefHeader')?.addEventListener('click', () => {
+    const content = document.getElementById('cobieFieldReference');
+    const icon = document.querySelector('#cobieFieldRefHeader .collapse-icon');
+    if (content && icon) {
+        content.classList.toggle('collapsed');
+        icon.textContent = content.classList.contains('collapsed') ? '▼' : '▲';
+    }
+});
+
+// Initialize presets on load
+requestAvailablePresets();
+requestPresetFields();
 
 // Initial render
 render();

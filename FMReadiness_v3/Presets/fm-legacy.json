@@ -1,0 +1,272 @@
+{
+  "name": "FM Legacy",
+  "version": "1.0.0",
+  "description": "Original FM_* parameter naming convention - maps to COBie equivalents",
+  "writeAliases": false,
+  "categories": [
+    "OST_MechanicalEquipment",
+    "OST_DuctTerminal",
+    "OST_DuctAccessory",
+    "OST_PipeAccessory"
+  ],
+  "tables": {
+    "Component": {
+      "description": "Asset instance fields using FM_* naming",
+      "fields": [
+        {
+          "cobieKey": "Component.Name",
+          "label": "Asset Tag",
+          "scope": "instance",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Asset Tag",
+          "aliasParams": ["Mark", "FM_AssetTag"],
+          "rules": ["unique"],
+          "group": "Identity",
+          "cobieColumn": "Name"
+        },
+        {
+          "cobieKey": "Component.SerialNumber",
+          "label": "Serial Number",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "Serial Number",
+          "aliasParams": ["FM_SerialNumber"],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "SerialNumber"
+        },
+        {
+          "cobieKey": "Component.TagNumber",
+          "label": "Barcode/QR",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "FM_Barcode",
+          "aliasParams": [],
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "TagNumber"
+        },
+        {
+          "cobieKey": "Component.AssetIdentifier",
+          "label": "CMMS Asset ID",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "revitParam": "FM_UniqueAssetId",
+          "aliasParams": [],
+          "rules": ["unique"],
+          "group": "Identity",
+          "cobieColumn": "AssetIdentifier"
+        },
+        {
+          "cobieKey": "Component.InstallationDate",
+          "label": "Installation Date",
+          "scope": "instance",
+          "dataType": "date",
+          "required": false,
+          "revitParam": "FM_InstallationDate",
+          "aliasParams": [],
+          "rules": ["date"],
+          "group": "InstallWarranty",
+          "cobieColumn": "InstallationDate"
+        },
+        {
+          "cobieKey": "Component.WarrantyStartDate",
+          "label": "Warranty Start",
+          "scope": "instance",
+          "dataType": "date",
+          "required": false,
+          "revitParam": "FM_WarrantyStart",
+          "aliasParams": [],
+          "rules": ["date"],
+          "group": "InstallWarranty",
+          "cobieColumn": "WarrantyStartDate"
+        },
+        {
+          "cobieKey": "Component.WarrantyEndDate",
+          "label": "Warranty End",
+          "scope": "instance",
+          "dataType": "date",
+          "required": false,
+          "revitParam": "FM_WarrantyEnd",
+          "aliasParams": [],
+          "rules": ["date"],
+          "group": "InstallWarranty",
+          "cobieColumn": "WarrantyEndDate"
+        },
+        {
+          "cobieKey": "Component.Space",
+          "label": "Space/Room",
+          "scope": "instance",
+          "dataType": "string",
+          "required": false,
+          "computed": { "source": "Element.RoomOrSpace" },
+          "rules": [],
+          "group": "Location",
+          "cobieColumn": "Space"
+        },
+        {
+          "cobieKey": "Component.TypeName",
+          "label": "Type Name",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "computed": { "source": "Element.TypeName" },
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "TypeName"
+        }
+      ]
+    },
+    "Type": {
+      "description": "Type-level fields",
+      "fields": [
+        {
+          "cobieKey": "Type.Name",
+          "label": "Type Name",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "computed": { "source": "Element.TypeName" },
+          "rules": [],
+          "group": "Identity",
+          "cobieColumn": "Name"
+        },
+        {
+          "cobieKey": "Type.Manufacturer",
+          "label": "Manufacturer",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Manufacturer",
+          "aliasParams": [],
+          "rules": [],
+          "group": "MakeModel",
+          "cobieColumn": "Manufacturer"
+        },
+        {
+          "cobieKey": "Type.ModelNumber",
+          "label": "Model",
+          "scope": "type",
+          "dataType": "string",
+          "required": true,
+          "revitParam": "Model",
+          "aliasParams": [],
+          "rules": [],
+          "group": "MakeModel",
+          "cobieColumn": "ModelNumber"
+        },
+        {
+          "cobieKey": "Type.TypeMark",
+          "label": "Type Mark",
+          "scope": "type",
+          "dataType": "string",
+          "required": false,
+          "revitParam": null,
+          "revitBuiltIn": "ALL_MODEL_TYPE_MARK",
+          "aliasParams": [],
+          "rules": [],
+          "group": "MakeModel",
+          "cobieColumn": "TypeMark"
+        }
+      ]
+    }
+  },
+  "fmOpsExtensions": {
+    "description": "FM operations fields specific to this legacy preset",
+    "fields": [
+      {
+        "cobieKey": "FMOps.Criticality",
+        "label": "Criticality",
+        "scope": "instance",
+        "dataType": "string",
+        "required": false,
+        "revitParam": "FM_Criticality",
+        "aliasParams": [],
+        "rules": [],
+        "group": "FMOps"
+      },
+      {
+        "cobieKey": "FMOps.Trade",
+        "label": "Maintainer/Trade",
+        "scope": "instance",
+        "dataType": "string",
+        "required": false,
+        "revitParam": "FM_Trade",
+        "aliasParams": [],
+        "rules": [],
+        "group": "FMOps"
+      },
+      {
+        "cobieKey": "FMOps.PMTemplateId",
+        "label": "PM Template ID",
+        "scope": "instance",
+        "dataType": "string",
+        "required": false,
+        "revitParam": "FM_PMTemplateId",
+        "aliasParams": [],
+        "rules": [],
+        "group": "FMOps"
+      },
+      {
+        "cobieKey": "FMOps.PMFrequencyDays",
+        "label": "PM Frequency (Days)",
+        "scope": "instance",
+        "dataType": "number",
+        "required": false,
+        "revitParam": "FM_PMFrequencyDays",
+        "aliasParams": [],
+        "rules": [],
+        "group": "FMOps"
+      },
+      {
+        "cobieKey": "FMOps.Building",
+        "label": "Building",
+        "scope": "instance",
+        "dataType": "string",
+        "required": false,
+        "revitParam": "FM_Building",
+        "aliasParams": [],
+        "rules": [],
+        "group": "Location"
+      },
+      {
+        "cobieKey": "FMOps.LocationOverride",
+        "label": "Location Override",
+        "scope": "instance",
+        "dataType": "string",
+        "required": false,
+        "revitParam": "FM_LocationSpace",
+        "aliasParams": [],
+        "rules": [],
+        "group": "Location"
+      }
+    ]
+  },
+  "computedFields": [
+    {
+      "cobieKey": "Computed.UniqueId",
+      "label": "UniqueId",
+      "scope": "instance",
+      "computed": { "source": "Element.UniqueId" },
+      "group": "Identity"
+    },
+    {
+      "cobieKey": "Computed.Level",
+      "label": "Level",
+      "scope": "instance",
+      "computed": { "source": "Element.LevelName" },
+      "group": "Location"
+    },
+    {
+      "cobieKey": "Computed.SpaceRoom",
+      "label": "Space/Room",
+      "scope": "instance",
+      "computed": { "source": "Element.RoomOrSpace" },
+      "group": "Location"
+    }
+  ]
+}

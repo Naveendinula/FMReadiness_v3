@@ -1,0 +1,240 @@
+{
+  "OST_MechanicalEquipment": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Component.Name", "label": "Component Name", "scope": "instance", "source": { "type": "name", "value": "Mark" }, "rules": ["unique", "required"] },
+          { "key": "Component.SerialNumber", "label": "Serial Number", "scope": "instance", "source": { "type": "name", "value": "Serial Number" } },
+          { "key": "Component.TagNumber", "label": "Tag/Barcode", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.TagNumber" }, "aliasParams": ["FM_Barcode", "Asset Tag"] },
+          { "key": "Component.AssetIdentifier", "label": "CMMS Asset ID", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.AssetIdentifier" }, "aliasParams": ["FM_UniqueAssetId"], "rules": ["unique"] },
+          { "key": "Component.Description", "label": "Description", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.Description" }, "aliasParams": ["Comments"] },
+          { "key": "Computed.UniqueId", "label": "UniqueId", "scope": "instance", "source": { "type": "computed", "id": "Element.UniqueId" } }
+        ]
+      },
+      "Metadata": {
+        "fields": [
+          { "key": "Component.CreatedBy", "label": "Created By", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.CreatedBy" }, "rules": ["required"] },
+          { "key": "Component.CreatedOn", "label": "Created On", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.CreatedOn" }, "rules": ["date", "required"] }
+        ]
+      },
+      "MakeModel": {
+        "fields": [
+          { "key": "Type.Manufacturer", "label": "Manufacturer", "scope": "type", "source": { "type": "name", "value": "Manufacturer" }, "rules": ["required"] },
+          { "key": "Type.ModelNumber", "label": "Model Number", "scope": "type", "source": { "type": "name", "value": "Model" }, "rules": ["required"] },
+          { "key": "Type.TypeMark", "label": "Type Mark", "scope": "type", "source": { "type": "builtin", "id": "ALL_MODEL_TYPE_MARK" } }
+        ]
+      },
+      "InstallWarranty": {
+        "fields": [
+          { "key": "Component.InstallationDate", "label": "Installation Date", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.InstallationDate" }, "aliasParams": ["FM_InstallationDate"], "rules": ["date"] },
+          { "key": "Component.WarrantyStartDate", "label": "Warranty Start", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.WarrantyStartDate" }, "aliasParams": ["FM_WarrantyStart"], "rules": ["date"] }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Component.Space", "label": "Space", "scope": "instance", "source": { "type": "computed", "id": "Element.RoomOrSpace" }, "rules": ["required"] },
+          { "key": "Computed.Level", "label": "Level", "scope": "instance", "source": { "type": "computed", "id": "Element.LevelName" } },
+          { "key": "FMOps.Building", "label": "Building", "scope": "instance", "source": { "type": "name", "value": "COBie.FMOps.Building" }, "aliasParams": ["FM_Building"] }
+        ]
+      },
+      "FMOps": {
+        "fields": [
+          { "key": "FMOps.Criticality", "label": "Criticality", "scope": "instance", "source": { "type": "name", "value": "COBie.FMOps.Criticality" }, "aliasParams": ["FM_Criticality"] },
+          { "key": "FMOps.Trade", "label": "Maintainer/Trade", "scope": "instance", "source": { "type": "name", "value": "COBie.FMOps.Trade" }, "aliasParams": ["FM_Trade"] },
+          { "key": "FMOps.PMTemplateId", "label": "PM Template ID", "scope": "instance", "source": { "type": "name", "value": "COBie.FMOps.PMTemplateId" }, "aliasParams": ["FM_PMTemplateId"] },
+          { "key": "FMOps.PMFrequencyDays", "label": "PM Frequency (Days)", "scope": "instance", "source": { "type": "name", "value": "COBie.FMOps.PMFrequencyDays" }, "aliasParams": ["FM_PMFrequencyDays"] }
+        ]
+      }
+    }
+  },
+  "OST_DuctTerminal": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Component.Name", "label": "Component Name", "scope": "instance", "source": { "type": "name", "value": "Mark" }, "rules": ["unique", "required"] },
+          { "key": "Component.TagNumber", "label": "Tag/Barcode", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.TagNumber" }, "aliasParams": ["FM_Barcode"] },
+          { "key": "Component.AssetIdentifier", "label": "CMMS Asset ID", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.AssetIdentifier" }, "aliasParams": ["FM_UniqueAssetId"], "rules": ["unique"] },
+          { "key": "Computed.UniqueId", "label": "UniqueId", "scope": "instance", "source": { "type": "computed", "id": "Element.UniqueId" } }
+        ]
+      },
+      "Metadata": {
+        "fields": [
+          { "key": "Component.CreatedBy", "label": "Created By", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.CreatedBy" }, "rules": ["required"] },
+          { "key": "Component.CreatedOn", "label": "Created On", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.CreatedOn" }, "rules": ["date", "required"] }
+        ]
+      },
+      "MakeModel": {
+        "fields": [
+          { "key": "Type.Manufacturer", "label": "Manufacturer", "scope": "type", "source": { "type": "name", "value": "Manufacturer" }, "rules": ["required"] }
+        ]
+      },
+      "InstallWarranty": {
+        "fields": [
+          { "key": "Component.InstallationDate", "label": "Installation Date", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.InstallationDate" }, "aliasParams": ["FM_InstallationDate"], "rules": ["date"] },
+          { "key": "Component.WarrantyStartDate", "label": "Warranty Start", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.WarrantyStartDate" }, "aliasParams": ["FM_WarrantyStart"], "rules": ["date"] }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Component.Space", "label": "Space", "scope": "instance", "source": { "type": "computed", "id": "Element.RoomOrSpace" }, "rules": ["required"] },
+          { "key": "Computed.Level", "label": "Level", "scope": "instance", "source": { "type": "computed", "id": "Element.LevelName" } },
+          { "key": "FMOps.Building", "label": "Building", "scope": "instance", "source": { "type": "name", "value": "COBie.FMOps.Building" }, "aliasParams": ["FM_Building"] }
+        ]
+      },
+      "FMOps": {
+        "fields": [
+          { "key": "FMOps.Criticality", "label": "Criticality", "scope": "instance", "source": { "type": "name", "value": "COBie.FMOps.Criticality" }, "aliasParams": ["FM_Criticality"] },
+          { "key": "FMOps.Trade", "label": "Maintainer/Trade", "scope": "instance", "source": { "type": "name", "value": "COBie.FMOps.Trade" }, "aliasParams": ["FM_Trade"] }
+        ]
+      }
+    }
+  },
+  "OST_DuctAccessory": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Component.Name", "label": "Component Name", "scope": "instance", "source": { "type": "name", "value": "Mark" }, "rules": ["unique", "required"] },
+          { "key": "Component.TagNumber", "label": "Tag/Barcode", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.TagNumber" }, "aliasParams": ["FM_Barcode"] },
+          { "key": "Computed.UniqueId", "label": "UniqueId", "scope": "instance", "source": { "type": "computed", "id": "Element.UniqueId" } }
+        ]
+      },
+      "Metadata": {
+        "fields": [
+          { "key": "Component.CreatedBy", "label": "Created By", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.CreatedBy" }, "rules": ["required"] },
+          { "key": "Component.CreatedOn", "label": "Created On", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.CreatedOn" }, "rules": ["date", "required"] }
+        ]
+      },
+      "InstallWarranty": {
+        "fields": [
+          { "key": "Component.InstallationDate", "label": "Installation Date", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.InstallationDate" }, "aliasParams": ["FM_InstallationDate"], "rules": ["date"] }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Component.Space", "label": "Space", "scope": "instance", "source": { "type": "computed", "id": "Element.RoomOrSpace" }, "rules": ["required"] },
+          { "key": "Computed.Level", "label": "Level", "scope": "instance", "source": { "type": "computed", "id": "Element.LevelName" } }
+        ]
+      }
+    }
+  },
+  "OST_PipeAccessory": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Component.Name", "label": "Component Name", "scope": "instance", "source": { "type": "name", "value": "Mark" }, "rules": ["unique", "required"] },
+          { "key": "Component.TagNumber", "label": "Tag/Barcode", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.TagNumber" }, "aliasParams": ["FM_Barcode"] },
+          { "key": "Computed.UniqueId", "label": "UniqueId", "scope": "instance", "source": { "type": "computed", "id": "Element.UniqueId" } }
+        ]
+      },
+      "Metadata": {
+        "fields": [
+          { "key": "Component.CreatedBy", "label": "Created By", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.CreatedBy" }, "rules": ["required"] },
+          { "key": "Component.CreatedOn", "label": "Created On", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.CreatedOn" }, "rules": ["date", "required"] }
+        ]
+      },
+      "InstallWarranty": {
+        "fields": [
+          { "key": "Component.InstallationDate", "label": "Installation Date", "scope": "instance", "source": { "type": "name", "value": "COBie.Component.InstallationDate" }, "aliasParams": ["FM_InstallationDate"], "rules": ["date"] }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Component.Space", "label": "Space", "scope": "instance", "source": { "type": "computed", "id": "Element.RoomOrSpace" }, "rules": ["required"] },
+          { "key": "Computed.Level", "label": "Level", "scope": "instance", "source": { "type": "computed", "id": "Element.LevelName" } }
+        ]
+      }
+    }
+  },
+  "OST_Rooms": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Space.Name", "label": "Space Name", "scope": "instance", "source": { "type": "computed", "id": "Space.Name" }, "rules": ["unique", "required"] },
+          { "key": "Space.RoomTag", "label": "Room Number", "scope": "instance", "source": { "type": "computed", "id": "Space.Number" }, "rules": ["unique"] },
+          { "key": "Space.Description", "label": "Description", "scope": "instance", "source": { "type": "name", "value": "Comments" } }
+        ]
+      },
+      "Metadata": {
+        "fields": [
+          { "key": "Space.CreatedBy", "label": "Created By", "scope": "instance", "source": { "type": "name", "value": "COBie.Space.CreatedBy" }, "rules": ["required"] },
+          { "key": "Space.CreatedOn", "label": "Created On", "scope": "instance", "source": { "type": "name", "value": "COBie.Space.CreatedOn" }, "rules": ["date", "required"] }
+        ]
+      },
+      "Classification": {
+        "fields": [
+          { "key": "Space.Category", "label": "Category", "scope": "instance", "source": { "type": "name", "value": "COBie.Space.Category" }, "rules": ["required"] }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Space.FloorName", "label": "Floor/Level", "scope": "instance", "source": { "type": "computed", "id": "Space.LevelName" }, "rules": ["required"] }
+        ]
+      },
+      "Dimensions": {
+        "fields": [
+          { "key": "Space.GrossArea", "label": "Gross Area", "scope": "instance", "source": { "type": "name", "value": "Area" } },
+          { "key": "Space.UsableHeight", "label": "Usable Height", "scope": "instance", "source": { "type": "name", "value": "Unbounded Height" } }
+        ]
+      }
+    }
+  },
+  "OST_MEPSpaces": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Space.Name", "label": "Space Name", "scope": "instance", "source": { "type": "computed", "id": "Space.Name" }, "rules": ["unique", "required"] },
+          { "key": "Space.RoomTag", "label": "Space Number", "scope": "instance", "source": { "type": "computed", "id": "Space.Number" }, "rules": ["unique"] },
+          { "key": "Space.Description", "label": "Description", "scope": "instance", "source": { "type": "name", "value": "Comments" } }
+        ]
+      },
+      "Metadata": {
+        "fields": [
+          { "key": "Space.CreatedBy", "label": "Created By", "scope": "instance", "source": { "type": "name", "value": "COBie.Space.CreatedBy" }, "rules": ["required"] },
+          { "key": "Space.CreatedOn", "label": "Created On", "scope": "instance", "source": { "type": "name", "value": "COBie.Space.CreatedOn" }, "rules": ["date", "required"] }
+        ]
+      },
+      "Classification": {
+        "fields": [
+          { "key": "Space.Category", "label": "Category", "scope": "instance", "source": { "type": "name", "value": "COBie.Space.Category" }, "rules": ["required"] }
+        ]
+      },
+      "Location": {
+        "fields": [
+          { "key": "Space.FloorName", "label": "Floor/Level", "scope": "instance", "source": { "type": "computed", "id": "Space.LevelName" }, "rules": ["required"] }
+        ]
+      },
+      "Dimensions": {
+        "fields": [
+          { "key": "Space.GrossArea", "label": "Gross Area", "scope": "instance", "source": { "type": "name", "value": "Area" } }
+        ]
+      }
+    }
+  },
+  "OST_Levels": {
+    "groups": {
+      "Identity": {
+        "fields": [
+          { "key": "Floor.Name", "label": "Floor Name", "scope": "instance", "source": { "type": "computed", "id": "Level.Name" }, "rules": ["unique", "required"] },
+          { "key": "Floor.Description", "label": "Description", "scope": "instance", "source": { "type": "name", "value": "COBie.Floor.Description" } }
+        ]
+      },
+      "Metadata": {
+        "fields": [
+          { "key": "Floor.CreatedBy", "label": "Created By", "scope": "instance", "source": { "type": "name", "value": "COBie.Floor.CreatedBy" }, "rules": ["required"] },
+          { "key": "Floor.CreatedOn", "label": "Created On", "scope": "instance", "source": { "type": "name", "value": "COBie.Floor.CreatedOn" }, "rules": ["date", "required"] }
+        ]
+      },
+      "Classification": {
+        "fields": [
+          { "key": "Floor.Category", "label": "Category", "scope": "instance", "source": { "type": "name", "value": "COBie.Floor.Category" }, "rules": ["required"] }
+        ]
+      },
+      "Dimensions": {
+        "fields": [
+          { "key": "Floor.Elevation", "label": "Elevation", "scope": "instance", "source": { "type": "computed", "id": "Level.Elevation" } },
+          { "key": "Floor.Height", "label": "Height", "scope": "instance", "source": { "type": "name", "value": "COBie.Floor.Height" } }
+        ]
+      }
+    }
+  }
+}

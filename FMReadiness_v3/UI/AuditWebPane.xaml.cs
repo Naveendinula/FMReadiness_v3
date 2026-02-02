@@ -166,6 +166,79 @@ namespace FMReadiness_v3.UI
                         WebViewPaneController.RequestAuditRefresh();
                         return;
                     }
+
+                    // COBie Preset Operations
+                    if (string.Equals(action, "getAvailablePresets", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.GetAvailablePresets);
+                        return;
+                    }
+
+                    if (string.Equals(action, "loadPreset", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.LoadPreset,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "getPresetFields", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.GetPresetFields,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "setCobieFieldValues", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.SetCobieFieldValues,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "validateCobieReadiness", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.ValidateCobieReadiness,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "ensureCobieParameters", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.EnsureCobieParameters,
+                            message);
+                        return;
+                    }
+
+                    // COBie Editor Operations
+                    if (string.Equals(action, "setCobieTypeFieldValues", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.SetCobieTypeFieldValues,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "setCobieCategoryFieldValues", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.SetCobieCategoryFieldValues,
+                            message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "copyComputedToCobieParam", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.CopyComputedToCobieParam,
+                            message);
+                        return;
+                    }
                 }
 
                 if (root.TryGetProperty("type", out var typeProp)

@@ -11,19 +11,46 @@ namespace FMReadiness_v3.Services
 {
     public class ChecklistService
     {
-        public Dictionary<string, CategoryConfig> Rules { get; private set; } = new();
+        private const string DefaultChecklist = "readiness_checklist.json";
+        private const string CobieChecklist = "cobie-core-checklist.json";
 
+        public Dictionary<string, CategoryConfig> Rules { get; private set; } = new();
+        public string CurrentChecklistName { get; private set; } = string.Empty;
+
+        private readonly string _assemblyDir;
+
+        public ChecklistService()
+        {
+            var assemblyPath = Assembly.GetExecutingAssembly().Location;
+            _assemblyDir = Path.GetDirectoryName(assemblyPath) ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Loads the default checklist configuration.
+        /// </summary>
         public bool LoadConfig()
+        {
+            return LoadChecklist(DefaultChecklist);
+        }
+
+        /// <summary>
+        /// Loads a specific checklist file.
+        /// </summary>
+        public bool LoadChecklist(string fileName)
         {
             try
             {
-                var assemblyPath = Assembly.GetExecutingAssembly().Location;
-                var assemblyDir = Path.GetDirectoryName(assemblyPath) ?? string.Empty;
-                var configPath = Path.Combine(assemblyDir, "readiness_checklist.json");
+                var configPath = Path.Combine(_assemblyDir, fileName);
 
                 if (!File.Exists(configPath))
                 {
-                    TaskDialog.Show("FM Readiness", $"Checklist file not found at: {configPath}");
+                    // Try in Presets folder
+                    configPath = Path.Combine(_assemblyDir, "Presets", fileName);
+                }
+
+                if (!File.Exists(configPath))
+                {
+                    TaskDialog.Show("FM Readiness", $"Checklist file not found: {fileName}");
                     return false;
                 }
 
@@ -38,6 +65,7 @@ namespace FMReadiness_v3.Services
                 if (rules is null) return false;
 
                 Rules = rules;
+                CurrentChecklistName = fileName;
                 return true;
             }
             catch (Exception ex)
@@ -45,6 +73,60 @@ namespace FMReadiness_v3.Services
                 TaskDialog.Show("FM Readiness", $"Failed to load checklist JSON: {ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Loads the COBie core checklist.
+        /// </summary>
+        public bool LoadCobieChecklist()
+        {
+            return LoadChecklist(CobieChecklist);
+        }
+
+        /// <summary>
+        /// Loads rules from a PresetService configuration.
+        /// </summary>
+        public bool LoadFromPreset(PresetService presetService)
+        {
+            if (presetService?.CurrentPreset == null)
+                return false;
+
+            try
+            {
+                Rules = presetService.ConvertToChecklistRules();
+                CurrentChecklistName = $"Preset: {presetService.CurrentPreset.Name}";
+                return Rules.Count > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Gets available checklist files.
+        /// </summary>
+        public List<string> GetAvailableChecklists()
+        {
+            var checklists = new List<string>();
+
+            // Check root directory
+            foreach (var file in Directory.GetFiles(_assemblyDir, "*checklist*.json"))
+            {
+                checklists.Add(Path.GetFileName(file));
+            }
+
+            // Check Presets folder
+            var presetsPath = Path.Combine(_assemblyDir, "Presets");
+            if (Directory.Exists(presetsPath))
+            {
+                foreach (var file in Directory.GetFiles(presetsPath, "*checklist*.json"))
+                {
+                    checklists.Add(Path.GetFileName(file));
+                }
+            }
+
+            return checklists;
         }
     }
 
