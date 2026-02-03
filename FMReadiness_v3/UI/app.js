@@ -36,6 +36,11 @@ const showMissingOnly = document.getElementById('showMissingOnly');
 const tableBody = document.getElementById('tableBody');
 const resultsTable = document.getElementById('resultsTable');
 const emptyState = document.getElementById('emptyState');
+const autoSyncSelectionEl = document.getElementById('autoSyncSelection');
+const lockSelectionEl = document.getElementById('lockSelection');
+const selectionScopeEl = document.getElementById('selectionScope');
+const scopeCategoryEl = document.getElementById('scopeCategory');
+const applyScopeEl = document.getElementById('applyScope');
 
 // Cache of elementId -> views[]
 const viewsByElementId = new Map();
@@ -455,6 +460,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
         if (tabId === 'editor') {
             requestSelectedElements();
+            setSelectionSyncState();
+            updateScopeCategoryVisibility();
         }
     });
 });
@@ -797,12 +804,29 @@ function collectCobieFieldValues(prefix) {
     const bulkInputs = prefix === 'bulk' ? document.querySelectorAll('#cobieBulkFieldsGrid .cobie-field-input') : [];
     const allInputs = inputs.length > 0 ? inputs : bulkInputs;
     
+    // In multi-select mode, only collect fields the user actually modified
+    const isMultiSelect = editorState.selectedElements.length > 1;
+    
     allInputs.forEach(input => {
         const value = input.value?.trim();
-        if (value) {
-            const cobieKey = input.dataset.cobieKey;
-            const revitParam = input.dataset.revitParam;
-            if (cobieKey || revitParam) {
+        const cobieKey = input.dataset.cobieKey;
+        const revitParam = input.dataset.revitParam;
+        
+        if (!cobieKey && !revitParam) return;
+        
+        // In multi-select: only include if user modified the field, OR if it has a value (single select)
+        if (isMultiSelect) {
+            // Only send if user explicitly modified this field
+            if (input.getAttribute('data-user-modified') === 'true' && value) {
+                fieldValues[cobieKey || revitParam] = {
+                    value: value,
+                    cobieKey: cobieKey,
+                    revitParam: revitParam
+                };
+            }
+        } else {
+            // Single select: send all non-empty values
+            if (value) {
                 fieldValues[cobieKey || revitParam] = {
                     value: value,
                     cobieKey: cobieKey,
@@ -970,6 +994,52 @@ function requestSelectedElements() {
     }
 }
 
+function setSelectionSyncState() {
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'setSelectionSyncState',
+            autoSync: autoSyncSelectionEl?.checked ?? true,
+            lockSelection: lockSelectionEl?.checked ?? false
+        });
+    }
+}
+
+function applySelectionScope() {
+    if (!window.chrome || !window.chrome.webview) return;
+
+    const scope = selectionScopeEl?.value || 'selection';
+    const payload = { action: 'applySelectionScope', scope: scope };
+
+    if (scope === 'category') {
+        const category = scopeCategoryEl?.value;
+        if (!category) {
+            showToast('Select a category', 'error');
+            return;
+        }
+        payload.category = category;
+    }
+
+    if (scope === 'selectedType') {
+        const typeIds = [...new Set(editorState.selectedElements.map(e => e.typeId).filter(Boolean))];
+        if (typeIds.length !== 1) {
+            showToast('Select elements of a single type', 'error');
+            return;
+        }
+        payload.typeId = typeIds[0];
+    }
+
+    window.chrome.webview.postMessage(payload);
+}
+
+function updateScopeCategoryVisibility() {
+    if (!scopeCategoryEl || !selectionScopeEl) return;
+    if (selectionScopeEl.value === 'category') {
+        scopeCategoryEl.classList.remove('hidden');
+    } else {
+        scopeCategoryEl.classList.add('hidden');
+    }
+}
+
 function requestCategoryStats(category) {
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.postMessage({
@@ -1039,7 +1109,7 @@ function receiveSelectedElementsData(msg) {
     const cobieTypeForm = document.getElementById('cobieTypeForm');
     
     if (elements.length === 0) {
-        infoEl.innerHTML = '<p class="placeholder-text">No elements selected. Select elements in Revit and click Refresh.</p>';
+        infoEl.innerHTML = '<p class="placeholder-text">No elements selected. Select elements in Revit or use Scope.</p>';
         formEl?.classList.add('hidden');
         typeInfoEl.innerHTML = '<p class="placeholder-text">Select an element to edit its type parameters</p>';
         typeFormEl?.classList.add('hidden');
@@ -1049,46 +1119,54 @@ function receiveSelectedElementsData(msg) {
         if (cobieTypeInfo) cobieTypeInfo.innerHTML = '<p class="placeholder-text">Select an element to edit type parameters</p>';
         cobieTypeForm?.classList.add('hidden');
         
+        // Hide multi-select legend
+        document.getElementById('multiSelectLegend')?.classList.add('hidden');
+        
         clearComputedValues();
         return;
     }
     
-    // Show element badges
-    let badgesHtml = elements.map(el => `
-        <span class="element-badge">
-            <span class="element-id">${el.elementId}</span>
-            <span>${el.category} - ${el.family}</span>
-        </span>
-    `).join('');
+    // Show element count badge for multi-select
+    const isMultiSelect = elements.length > 1;
+    let badgesHtml = '';
     
-    if (elements.length > 5) {
-        badgesHtml = elements.slice(0, 5).map(el => `
+    if (isMultiSelect) {
+        // Show count badge and category summary
+        const categories = [...new Set(elements.map(e => e.category))];
+        const categoryText = categories.length === 1 
+            ? categories[0] 
+            : `${categories.length} categories`;
+        badgesHtml = `
+            <span class="element-count-badge">
+                <span class="icon">☰</span>
+                <span>${elements.length} elements selected (${categoryText})</span>
+            </span>
+        `;
+        // Show legend
+        document.getElementById('multiSelectLegend')?.classList.remove('hidden');
+    } else {
+        // Single element - show badge
+        const el = elements[0];
+        badgesHtml = `
             <span class="element-badge">
                 <span class="element-id">${el.elementId}</span>
-                <span>${el.category}</span>
+                <span>${el.category} - ${el.family}</span>
             </span>
-        `).join('') + `<span class="element-badge">+${elements.length - 5} more</span>`;
+        `;
+        // Hide legend
+        document.getElementById('multiSelectLegend')?.classList.add('hidden');
     }
     
     infoEl.innerHTML = badgesHtml;
     formEl?.classList.remove('hidden');
     cobieInstanceForm?.classList.remove('hidden');
     
-    // Pre-fill instance params if single element
+    // Handle single or multiple selection
     if (elements.length === 1) {
+        // Single selection - pre-fill all fields directly
         const el = elements[0];
-        const ip = el.instanceParams || {};
-        document.getElementById('edit_FM_Barcode').value = ip.FM_Barcode || '';
-        document.getElementById('edit_FM_UniqueAssetId').value = ip.FM_UniqueAssetId || '';
-        document.getElementById('edit_FM_InstallationDate').value = ip.FM_InstallationDate || '';
-        document.getElementById('edit_FM_WarrantyStart').value = ip.FM_WarrantyStart || '';
-        document.getElementById('edit_FM_WarrantyEnd').value = ip.FM_WarrantyEnd || '';
-        document.getElementById('edit_FM_Criticality').value = ip.FM_Criticality || '';
-        document.getElementById('edit_FM_Trade').value = ip.FM_Trade || '';
-        document.getElementById('edit_FM_PMTemplateId').value = ip.FM_PMTemplateId || '';
-        document.getElementById('edit_FM_PMFrequencyDays').value = ip.FM_PMFrequencyDays || '';
-        document.getElementById('edit_FM_Building').value = ip.FM_Building || '';
-        document.getElementById('edit_FM_LocationSpace').value = ip.FM_LocationSpace || '';
+        populateLegacyFieldsFromElement(el);
+        populateCobieFieldsFromElement(el);
         
         // Update type info (legacy)
         if (el.typeId && el.typeName) {
@@ -1131,17 +1209,227 @@ function receiveSelectedElementsData(msg) {
         // Populate COBie editor fields
         populateCobieFieldsFromElement(el);
     } else {
-        // Multiple selection - clear fields
-        clearInstanceForm();
-        typeInfoEl.innerHTML = '<p class="placeholder-text">Select a single element to edit type parameters</p>';
-        typeFormEl?.classList.add('hidden');
+        // Multiple selection - compute and display common values
+        populateMultiSelectFields(elements);
         
-        if (cobieTypeInfo) cobieTypeInfo.innerHTML = '<p class="placeholder-text">Select a single element to edit type parameters</p>';
-        cobieTypeForm?.classList.add('hidden');
+        // Check if all elements share the same type
+        const typeIds = [...new Set(elements.map(e => e.typeId).filter(Boolean))];
+        if (typeIds.length === 1) {
+            // Same type - allow type editing
+            const el = elements[0];
+            editorState.currentTypeId = el.typeId;
+            editorState.currentTypeInfo = el;
+            const totalInstances = el.typeInstanceCount || '?';
+            typeInfoEl.innerHTML = `
+                <div class="type-badge">
+                    <span class="type-name">${el.typeName}</span>
+                    <span>(${totalInstances} instances total, ${elements.length} selected)</span>
+                </div>
+            `;
+            typeFormEl?.classList.remove('hidden');
+            
+            // Populate type fields with common values
+            populateTypeFieldsFromMultiSelect(elements);
+            
+            if (cobieTypeInfo) {
+                cobieTypeInfo.innerHTML = `
+                    <div class="type-badge">
+                        <span class="type-name">${el.typeName}</span>
+                        <span>(${totalInstances} instances total)</span>
+                    </div>
+                `;
+            }
+            cobieTypeForm?.classList.remove('hidden');
+        } else {
+            // Different types - disable type editing
+            typeInfoEl.innerHTML = `<p class="placeholder-text multi-type-warning">⚠ ${typeIds.length} different types selected - type editing disabled</p>`;
+            typeFormEl?.classList.add('hidden');
+            
+            if (cobieTypeInfo) cobieTypeInfo.innerHTML = `<p class="placeholder-text multi-type-warning">⚠ ${typeIds.length} different types selected</p>`;
+            cobieTypeForm?.classList.add('hidden');
+        }
         
+        // Clear computed values for multi-select (they vary per element)
         clearComputedValues();
-        clearCobieInstanceForm();
     }
+}
+
+// ========================================
+// Multi-Select Value Comparison
+// ========================================
+
+/**
+ * Compute common values across multiple selected elements.
+ * Returns an object with { fieldName: { value, varies, blankCount } }
+ */
+function computeCommonValues(elements, fieldGetter) {
+    const comparison = {};
+    const sampleFields = fieldGetter(elements[0]) || {};
+    
+    Object.keys(sampleFields).forEach(fieldName => {
+        const values = elements.map(el => {
+            const fields = fieldGetter(el) || {};
+            return fields[fieldName] || '';
+        });
+        
+        const nonBlankValues = values.filter(v => v && v.trim());
+        const uniqueValues = [...new Set(nonBlankValues)];
+        
+        comparison[fieldName] = {
+            value: uniqueValues.length === 1 ? uniqueValues[0] : null,
+            varies: uniqueValues.length > 1,
+            blankCount: values.length - nonBlankValues.length,
+            uniqueValues: uniqueValues
+        };
+    });
+    
+    return comparison;
+}
+
+/**
+ * Populate legacy FM_ fields from multi-select with common value logic
+ */
+function populateMultiSelectFields(elements) {
+    // Legacy FM_ instance params
+    const legacyComparison = computeCommonValues(elements, el => el.instanceParams);
+    const legacyFields = [
+        'FM_Barcode', 'FM_UniqueAssetId', 'FM_InstallationDate',
+        'FM_WarrantyStart', 'FM_WarrantyEnd', 'FM_Criticality',
+        'FM_Trade', 'FM_PMTemplateId', 'FM_PMFrequencyDays',
+        'FM_Building', 'FM_LocationSpace'
+    ];
+    
+    legacyFields.forEach(fieldName => {
+        const input = document.getElementById(`edit_${fieldName}`);
+        if (!input) return;
+        
+        const info = legacyComparison[fieldName] || { value: null, varies: false, blankCount: elements.length };
+        applyMultiSelectValueToInput(input, info, elements.length);
+    });
+    
+    // COBie instance params
+    const cobieComparison = computeCommonValues(elements, el => el.cobieInstanceParams);
+    populateCobieFieldsFromMultiSelect(cobieComparison, elements.length);
+}
+
+/**
+ * Apply multi-select value info to an input field
+ */
+function applyMultiSelectValueToInput(input, info, totalCount) {
+    // Reset state
+    input.classList.remove('common-value', 'varies-value', 'all-blank');
+    input.removeAttribute('data-original-value');
+    input.removeAttribute('data-user-modified');
+    
+    if (info.value) {
+        // All elements have the same value
+        input.value = info.value;
+        input.placeholder = '';
+        input.classList.add('common-value');
+        input.setAttribute('data-original-value', info.value);
+    } else if (info.varies) {
+        // Values differ across elements
+        input.value = '';
+        input.placeholder = `(varies: ${info.uniqueValues.length} values)`;
+        input.classList.add('varies-value');
+        input.setAttribute('data-original-value', '__VARIES__');
+    } else {
+        // All blank
+        input.value = '';
+        input.placeholder = `(all ${totalCount} empty)`;
+        input.classList.add('all-blank');
+        input.setAttribute('data-original-value', '');
+    }
+    
+    // Track user modifications
+    input.addEventListener('input', markFieldAsModified, { once: true });
+}
+
+function markFieldAsModified(e) {
+    e.target.setAttribute('data-user-modified', 'true');
+    e.target.classList.add('user-modified');
+}
+
+/**
+ * Populate COBie fields from multi-select comparison
+ */
+function populateCobieFieldsFromMultiSelect(cobieComparison, totalCount) {
+    editorState.cobieFields.instance.forEach(field => {
+        const fieldId = `instance_${(field.cobieKey || '').replace(/\./g, '_')}`;
+        const input = document.getElementById(fieldId);
+        if (!input) return;
+        
+        const info = cobieComparison[field.cobieKey] || { value: null, varies: false, blankCount: totalCount };
+        applyMultiSelectValueToInput(input, info, totalCount);
+        
+        // Update required field styling
+        if (field.required && !info.value && !info.varies) {
+            input.classList.add('missing-required');
+        } else {
+            input.classList.remove('missing-required');
+        }
+    });
+}
+
+/**
+ * Populate type fields from multi-select (when all elements share same type)
+ */
+function populateTypeFieldsFromMultiSelect(elements) {
+    const typeComparison = computeCommonValues(elements, el => el.typeParams);
+    
+    ['Manufacturer', 'Model', 'TypeMark'].forEach(fieldName => {
+        const input = document.getElementById(`type_${fieldName}`);
+        if (!input) return;
+        
+        const info = typeComparison[fieldName] || { value: null, varies: false };
+        // Type params should be same across all instances of same type
+        input.value = info.value || '';
+    });
+    
+    const impactEl = document.getElementById('typeImpact');
+    if (impactEl && elements[0]) {
+        impactEl.textContent = `Will update ${elements[0].typeInstanceCount || '?'} instances`;
+    }
+    
+    // COBie type fields
+    const cobieTypeComparison = computeCommonValues(elements, el => el.cobieTypeParams);
+    editorState.cobieFields.type.forEach(field => {
+        const fieldId = `type_${(field.cobieKey || '').replace(/\./g, '_')}`;
+        const input = document.getElementById(fieldId);
+        if (!input) return;
+        
+        const info = cobieTypeComparison[field.cobieKey] || { value: null, varies: false };
+        input.value = info.value || '';
+    });
+    
+    const cobieImpactEl = document.getElementById('cobieTypeImpact');
+    if (cobieImpactEl && elements[0]) {
+        cobieImpactEl.textContent = `Will update ${elements[0].typeInstanceCount || '?'} instances`;
+    }
+}
+
+/**
+ * Helper to populate legacy fields from a single element
+ */
+function populateLegacyFieldsFromElement(el) {
+    const ip = el.instanceParams || {};
+    document.getElementById('edit_FM_Barcode').value = ip.FM_Barcode || '';
+    document.getElementById('edit_FM_UniqueAssetId').value = ip.FM_UniqueAssetId || '';
+    document.getElementById('edit_FM_InstallationDate').value = ip.FM_InstallationDate || '';
+    document.getElementById('edit_FM_WarrantyStart').value = ip.FM_WarrantyStart || '';
+    document.getElementById('edit_FM_WarrantyEnd').value = ip.FM_WarrantyEnd || '';
+    document.getElementById('edit_FM_Criticality').value = ip.FM_Criticality || '';
+    document.getElementById('edit_FM_Trade').value = ip.FM_Trade || '';
+    document.getElementById('edit_FM_PMTemplateId').value = ip.FM_PMTemplateId || '';
+    document.getElementById('edit_FM_PMFrequencyDays').value = ip.FM_PMFrequencyDays || '';
+    document.getElementById('edit_FM_Building').value = ip.FM_Building || '';
+    document.getElementById('edit_FM_LocationSpace').value = ip.FM_LocationSpace || '';
+    
+    // Update computed values
+    const computed = el.computed || {};
+    document.getElementById('computed_UniqueId').textContent = computed.UniqueId || '--';
+    document.getElementById('computed_Level').textContent = computed.Level || '--';
+    document.getElementById('computed_RoomSpace').textContent = computed.RoomSpace || '--';
 }
 
 function clearCobieInstanceForm() {
@@ -1235,6 +1523,22 @@ function showToast(message, type = 'info') {
 // ========================================
 // Parameter Editor - Event Handlers
 // ========================================
+
+autoSyncSelectionEl?.addEventListener('change', () => {
+    setSelectionSyncState();
+});
+
+lockSelectionEl?.addEventListener('change', () => {
+    setSelectionSyncState();
+});
+
+selectionScopeEl?.addEventListener('change', () => {
+    updateScopeCategoryVisibility();
+});
+
+applyScopeEl?.addEventListener('click', () => {
+    applySelectionScope();
+});
 
 // Refresh selection button
 document.getElementById('refreshSelection')?.addEventListener('click', () => {
@@ -1627,6 +1931,16 @@ function renderCobieFieldReference() {
 // Validate COBie button
 document.getElementById('validateCobieBtn')?.addEventListener('click', () => {
     validateCobieReadiness();
+});
+
+// Selected Elements help panel
+document.getElementById('selectionHelpHeader')?.addEventListener('click', () => {
+    const content = document.getElementById('selectionHelpContent');
+    const icon = document.querySelector('#selectionHelpHeader .collapse-icon');
+    if (content && icon) {
+        content.classList.toggle('collapsed');
+        icon.textContent = content.classList.contains('collapsed') ? '▼' : '▲';
+    }
 });
 
 // Collapsible field reference

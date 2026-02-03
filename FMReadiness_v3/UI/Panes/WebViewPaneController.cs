@@ -7,8 +7,10 @@ using System.Runtime.Serialization.Json;
 using System.Text;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Events;
 using FMReadiness_v3.Services;
 using FMReadiness_v3.UI.ExternalEvents;
+using Nice3point.Revit.Toolkit.External;
 
 namespace FMReadiness_v3.UI.Panes
 {
@@ -24,6 +26,13 @@ namespace FMReadiness_v3.UI.Panes
         private static ParameterEditorExternalEventHandler? _paramEditorHandler;
         private static ExternalEvent? _paramEditorEvent;
         private static string? _cachedJson;
+        private static EventHandler<IdlingEventArgs>? _idlingHandler;
+        private static readonly TimeSpan SelectionSyncInterval = TimeSpan.FromMilliseconds(350);
+        private static DateTime _lastSelectionSyncUtc = DateTime.MinValue;
+        private static IReadOnlyList<int> _lastSelectionIds = Array.Empty<int>();
+        private static bool _autoSyncEnabled = true;
+        private static bool _selectionLocked;
+        private static bool _forceSelectionSync;
 
         public static void Initialize()
         {
@@ -46,11 +55,37 @@ namespace FMReadiness_v3.UI.Panes
         public static void RegisterPane(AuditWebPane pane)
         {
             _paneInstance = pane;
+            _forceSelectionSync = true;
 
             var cachedJson = _cachedJson;
             if (!string.IsNullOrEmpty(cachedJson))
             {
                 _paneInstance.PostAuditResults(cachedJson!);
+            }
+        }
+
+        public static void StartSelectionAutoSync(UIControlledApplication application)
+        {
+            if (_idlingHandler != null) return;
+            _idlingHandler = OnIdling;
+            application.Idling += _idlingHandler;
+        }
+
+        public static void StopSelectionAutoSync(UIControlledApplication application)
+        {
+            if (_idlingHandler == null) return;
+            application.Idling -= _idlingHandler;
+            _idlingHandler = null;
+        }
+
+        public static void SetSelectionSyncState(bool autoSyncEnabled, bool selectionLocked)
+        {
+            _autoSyncEnabled = autoSyncEnabled;
+            _selectionLocked = selectionLocked;
+
+            if (_autoSyncEnabled && !_selectionLocked)
+            {
+                _forceSelectionSync = true;
             }
         }
 
@@ -182,6 +217,55 @@ namespace FMReadiness_v3.UI.Panes
             using var stream = new MemoryStream();
             serializer.WriteObject(stream, value);
             return Encoding.UTF8.GetString(stream.ToArray());
+        }
+
+        private static void OnIdling(object sender, IdlingEventArgs e)
+        {
+            if (!_autoSyncEnabled || _selectionLocked) return;
+            if (_paneInstance == null || _paramEditorHandler == null) return;
+
+            var now = DateTime.UtcNow;
+            if (!_forceSelectionSync && now - _lastSelectionSyncUtc < SelectionSyncInterval) return;
+            _lastSelectionSyncUtc = now;
+
+            var uiApp = sender as UIApplication ?? TryGetUiApplication();
+            if (uiApp == null) return;
+            var uidoc = uiApp.ActiveUIDocument;
+            if (uidoc == null) return;
+
+            if (!_paramEditorHandler.TryBuildSelectedElementsSnapshot(uidoc, uidoc.Document, out var elementIds, out var json))
+                return;
+
+            if (!_forceSelectionSync && AreSameSelection(elementIds, _lastSelectionIds))
+                return;
+
+            _forceSelectionSync = false;
+            _lastSelectionIds = elementIds.ToArray();
+            _paneInstance.PostAuditResults(json);
+        }
+
+        private static bool AreSameSelection(IReadOnlyList<int> current, IReadOnlyList<int> previous)
+        {
+            if (ReferenceEquals(current, previous)) return true;
+            if (current.Count != previous.Count) return false;
+            for (int i = 0; i < current.Count; i++)
+            {
+                if (current[i] != previous[i]) return false;
+            }
+
+            return true;
+        }
+
+        private static UIApplication? TryGetUiApplication()
+        {
+            try
+            {
+                return Context.UiApplication;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static int GetElementIdValue(ElementId id)

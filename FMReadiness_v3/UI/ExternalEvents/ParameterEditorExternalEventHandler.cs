@@ -22,6 +22,7 @@ namespace FMReadiness_v3.UI.ExternalEvents
         public enum OperationType
         {
             GetSelectedElements,
+            ApplySelectionScope,
             GetCategoryStats,
             SetInstanceParams,
             SetCategoryParams,
@@ -63,6 +64,9 @@ namespace FMReadiness_v3.UI.ExternalEvents
                 {
                     case OperationType.GetSelectedElements:
                         HandleGetSelectedElements(uidoc, doc);
+                        break;
+                    case OperationType.ApplySelectionScope:
+                        HandleApplySelectionScope(uidoc, doc);
                         break;
                     case OperationType.GetCategoryStats:
                         HandleGetCategoryStats(doc);
@@ -964,11 +968,52 @@ namespace FMReadiness_v3.UI.ExternalEvents
 
         #endregion
 
+        private sealed class SelectedElementsSnapshot
+        {
+            public IReadOnlyList<int> ElementIds { get; }
+            public string Json { get; }
+
+            public SelectedElementsSnapshot(IReadOnlyList<int> elementIds, string json)
+            {
+                ElementIds = elementIds;
+                Json = json;
+            }
+        }
+
+        internal bool TryBuildSelectedElementsSnapshot(UIDocument uidoc, Document doc, out IReadOnlyList<int> elementIds, out string json)
+        {
+            elementIds = Array.Empty<int>();
+            json = string.Empty;
+
+            try
+            {
+                var snapshot = BuildSelectedElementsSnapshot(uidoc, doc);
+                elementIds = snapshot.ElementIds;
+                json = snapshot.Json;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogException(ex);
+                return false;
+            }
+        }
+
         private void HandleGetSelectedElements(UIDocument uidoc, Document doc)
+        {
+            if (TryBuildSelectedElementsSnapshot(uidoc, doc, out _, out var json))
+            {
+                PostResult?.Invoke(json);
+            }
+        }
+
+        private SelectedElementsSnapshot BuildSelectedElementsSnapshot(UIDocument uidoc, Document doc)
         {
             var selectedIds = uidoc.Selection.GetElementIds();
             var elements = new List<object>();
-            var includeCobieValues = selectedIds.Count == 1;
+            var includedIds = new List<int>();
+            // Allow COBie values for multi-select (up to 100 elements for performance)
+            var includeCobieValues = selectedIds.Count > 0 && selectedIds.Count <= 100;
 
             if (includeCobieValues)
             {
@@ -1048,9 +1093,12 @@ namespace FMReadiness_v3.UI.ExternalEvents
                         kvp => kvp.Value.Value);
                 }
 
+                var elementIdValue = GetElementIdValue(element.Id);
+                includedIds.Add(elementIdValue);
+
                 elements.Add(new
                 {
-                    elementId = GetElementIdValue(element.Id),
+                    elementId = elementIdValue,
                     category = element.Category?.Name ?? "Unknown",
                     family = elementType?.FamilyName ?? "Unknown",
                     typeName = elementType?.Name ?? "Unknown",
@@ -1064,9 +1112,135 @@ namespace FMReadiness_v3.UI.ExternalEvents
                 });
             }
 
+            includedIds.Sort();
+
             var result = new { type = "selectedElementsData", elements = elements };
             var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            PostResult?.Invoke(json);
+            return new SelectedElementsSnapshot(includedIds, json);
+        }
+
+        private void HandleApplySelectionScope(UIDocument uidoc, Document doc)
+        {
+            if (string.IsNullOrEmpty(JsonPayload))
+            {
+                SendOperationResult(false, "No scope specified");
+                return;
+            }
+
+            using var jsonDoc = JsonDocument.Parse(JsonPayload);
+            var root = jsonDoc.RootElement;
+            if (!root.TryGetProperty("scope", out var scopeProp))
+            {
+                SendOperationResult(false, "No scope specified");
+                return;
+            }
+
+            var scope = scopeProp.GetString();
+            if (string.IsNullOrWhiteSpace(scope))
+            {
+                SendOperationResult(false, "Invalid scope");
+                return;
+            }
+
+            List<ElementId> targetIds;
+
+            switch (scope)
+            {
+                case "selection":
+                    targetIds = uidoc.Selection.GetElementIds().ToList();
+                    break;
+                case "activeView":
+                    var view = doc.ActiveView;
+                    if (view == null)
+                    {
+                        SendOperationResult(false, "No active view");
+                        return;
+                    }
+
+                    targetIds = new FilteredElementCollector(doc, view.Id)
+                        .WhereElementIsNotElementType()
+                        .WherePasses(CreateTargetCategoryFilter())
+                        .ToElementIds()
+                        .ToList();
+                    break;
+                case "category":
+                    if (!root.TryGetProperty("category", out var categoryProp))
+                    {
+                        SendOperationResult(false, "No category specified");
+                        return;
+                    }
+
+                    var categoryStr = categoryProp.GetString();
+                    if (!TryParseBuiltInCategory(categoryStr, out var category))
+                    {
+                        SendOperationResult(false, "Invalid category");
+                        return;
+                    }
+
+                    if (!IsTargetCategory(category))
+                    {
+                        SendOperationResult(false, "Category not supported in editor");
+                        return;
+                    }
+
+                    targetIds = new FilteredElementCollector(doc)
+                        .OfCategory(category)
+                        .WhereElementIsNotElementType()
+                        .ToElementIds()
+                        .ToList();
+                    break;
+                case "selectedType":
+                    ElementId? typeId = null;
+                    if (root.TryGetProperty("typeId", out var typeIdProp)
+                        && typeIdProp.ValueKind == JsonValueKind.Number)
+                    {
+                        typeId = new ElementId(typeIdProp.GetInt32());
+                    }
+
+                    if (typeId == null || typeId == ElementId.InvalidElementId)
+                    {
+                        var selectedTypeIds = uidoc.Selection.GetElementIds()
+                            .Select(id => doc.GetElement(id))
+                            .Where(e => e != null && IsTargetCategory(e))
+                            .Select(e => e!.GetTypeId())
+                            .Where(id => id != ElementId.InvalidElementId)
+                            .Distinct()
+                            .ToList();
+
+                        if (selectedTypeIds.Count != 1)
+                        {
+                            SendOperationResult(false, "Select elements of a single type");
+                            return;
+                        }
+
+                        typeId = selectedTypeIds[0];
+                    }
+
+                    var resolvedTypeId = typeId;
+                    targetIds = new FilteredElementCollector(doc)
+                        .WhereElementIsNotElementType()
+                        .WherePasses(CreateTargetCategoryFilter())
+                        .Where(e => e.GetTypeId() == resolvedTypeId)
+                        .Select(e => e.Id)
+                        .ToList();
+                    break;
+                default:
+                    SendOperationResult(false, "Unsupported scope");
+                    return;
+            }
+
+            uidoc.Selection.SetElementIds(targetIds);
+
+            HandleGetSelectedElements(uidoc, doc);
+
+            if (targetIds.Count == 0)
+            {
+                SendOperationResult(false, "No elements found for scope");
+            }
+            else
+            {
+                SendOperationResult(true, $"Selected {targetIds.Count} elements");
+            }
         }
 
         private void HandleGetCategoryStats(Document doc)
@@ -1569,16 +1743,34 @@ namespace FMReadiness_v3.UI.ExternalEvents
             PostResult?.Invoke(json);
         }
 
+        private static readonly BuiltInCategory[] TargetCategories =
+        {
+            BuiltInCategory.OST_MechanicalEquipment,
+            BuiltInCategory.OST_DuctTerminal,
+            BuiltInCategory.OST_DuctAccessory,
+            BuiltInCategory.OST_PipeAccessory
+        };
+
+        private static readonly HashSet<long> TargetCategoryValues = new(
+            TargetCategories.Select(GetBuiltInCategoryValue));
+
+        private static ElementMulticategoryFilter CreateTargetCategoryFilter()
+        {
+            return new ElementMulticategoryFilter(TargetCategories);
+        }
+
         private static bool IsTargetCategory(Element element)
         {
             var category = element.Category;
             if (category == null) return false;
 
             var rawValue = GetElementIdValueLong(category.Id);
-            return rawValue == GetBuiltInCategoryValue(BuiltInCategory.OST_MechanicalEquipment)
-                || rawValue == GetBuiltInCategoryValue(BuiltInCategory.OST_DuctTerminal)
-                || rawValue == GetBuiltInCategoryValue(BuiltInCategory.OST_DuctAccessory)
-                || rawValue == GetBuiltInCategoryValue(BuiltInCategory.OST_PipeAccessory);
+            return TargetCategoryValues.Contains(rawValue);
+        }
+
+        private static bool IsTargetCategory(BuiltInCategory category)
+        {
+            return TargetCategoryValues.Contains(GetBuiltInCategoryValue(category));
         }
 
         private static long GetBuiltInCategoryValue(BuiltInCategory category)

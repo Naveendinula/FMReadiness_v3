@@ -7,7 +7,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link id="mainStylesheet" rel="stylesheet" href="styles.css">
+    <script>
+        // Cache-bust static assets when hosted in WebView2.
+        // The host sets ?v=<ticks> on index.html; reuse it for CSS/JS.
+        (function () {
+            const v = new URLSearchParams(window.location.search).get('v');
+            if (!v) return;
+            const css = document.getElementById('mainStylesheet');
+            if (css) css.href = `styles.css?v=${encodeURIComponent(v)}`;
+        })();
+    </script>
 </head>
 <body>
     <div class="container">
@@ -72,28 +82,30 @@
             </div>
 
             <!-- Results Table -->
-            <div class="table-container">
-                <table id="resultsTable">
-                    <thead>
-                        <tr>
-                            <th>Element ID</th>
-                            <th>Status</th>
-                            <th>Category</th>
-                            <th>Family</th>
-                            <th>Type</th>
-                            <th>Readiness</th>
-                            <th>Groups</th>
-                            <th>Missing</th>
-                            <th>View</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <!-- Rows will be populated by JS -->
-                    </tbody>
-                </table>
-                <div id="emptyState" class="empty-state">
-                    Run an audit to see results
+            <div class="table-wrapper">
+                <div class="table-container">
+                    <table id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>Element ID</th>
+                                <th>Status</th>
+                                <th>Category</th>
+                                <th>Family</th>
+                                <th>Type</th>
+                                <th>Readiness</th>
+                                <th>Groups</th>
+                                <th>Missing</th>
+                                <th>View</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <!-- Rows will be populated by JS -->
+                        </tbody>
+                    </table>
+                    <div id="emptyState" class="empty-state">
+                        Run an audit to see results
+                    </div>
                 </div>
             </div>
         </div>
@@ -114,10 +126,57 @@
             <section class="editor-section">
                 <div class="section-header">
                     <h3>Selected Elements</h3>
-                    <button class="btn-secondary btn-sm" id="refreshSelection">Refresh</button>
+                    <button class="btn-secondary btn-sm" id="refreshSelection" title="Manually refresh the current Revit selection">Refresh</button>
+                </div>
+                <div class="selection-controls">
+                    <div class="control-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autoSyncSelection" checked title="Automatically sync when the Revit selection changes">
+                            Auto-sync
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="lockSelection" title="Freeze the current selection while you edit fields">
+                            Lock selection
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label class="scope-label" for="selectionScope">Scope</label>
+                        <select id="selectionScope" title="Choose how to build the selection set">
+                            <option value="selection">Current selection</option>
+                            <option value="activeView">Active view</option>
+                            <option value="selectedType">All instances of selected type</option>
+                            <option value="category">By category</option>
+                        </select>
+                        <select id="scopeCategory" class="scope-category hidden" title="Category used when Scope is set to By category">
+                            <option value="">Select category</option>
+                            <option value="OST_MechanicalEquipment">Mechanical Equipment</option>
+                            <option value="OST_DuctTerminal">Duct Terminals</option>
+                            <option value="OST_DuctAccessory">Duct Accessories</option>
+                            <option value="OST_PipeAccessory">Pipe Accessories</option>
+                        </select>
+                        <button class="btn-secondary btn-sm" id="applyScope" title="Select elements based on the chosen scope">Apply Scope</button>
+                    </div>
+                </div>
+                <div class="help-toggle" id="selectionHelpHeader">
+                    <span>How to use</span>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="selectionHelpContent" class="help-content collapsed">
+                    <ol>
+                        <li>Select elements in Revit or use Scope + Apply Scope.</li>
+                        <li>Auto-sync keeps the editor updated as selection changes.</li>
+                        <li>Lock selection to prevent accidental changes while editing.</li>
+                        <li>Click Refresh if you want a manual update.</li>
+                    </ol>
                 </div>
                 <div id="selectedElementInfo" class="selection-info">
-                    <p class="placeholder-text">Select elements in Revit and click Refresh</p>
+                    <p class="placeholder-text">Select elements in Revit to begin</p>
+                </div>
+                <!-- Multi-select legend (shown when multiple elements selected) -->
+                <div id="multiSelectLegend" class="multi-select-legend hidden">
+                    <span class="legend-item"><span class="legend-swatch common"></span> Same value</span>
+                    <span class="legend-item"><span class="legend-swatch varies"></span> Values differ</span>
+                    <span class="legend-item"><span class="legend-swatch modified"></span> Modified</span>
                 </div>
             </section>
 
@@ -487,6 +546,13 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script>
+        (function () {
+            const v = new URLSearchParams(window.location.search).get('v');
+            const s = document.createElement('script');
+            s.src = v ? `app.js?v=${encodeURIComponent(v)}` : 'app.js';
+            document.body.appendChild(s);
+        })();
+    </script>
 </body>
 </html>

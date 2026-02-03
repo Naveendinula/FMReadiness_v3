@@ -17,6 +17,12 @@ namespace FMReadiness_v3
             WebViewPaneController.Initialize();
             RegisterDockablePane();
             CreateRibbon();
+            WebViewPaneController.StartSelectionAutoSync(base.Application);
+        }
+
+        public override void OnShutdown()
+        {
+            WebViewPaneController.StopSelectionAutoSync(base.Application);
         }
 
         private void RegisterDockablePane()

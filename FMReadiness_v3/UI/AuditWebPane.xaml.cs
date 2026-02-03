@@ -121,6 +121,22 @@ namespace FMReadiness_v3.UI
                         return;
                     }
 
+                    if (string.Equals(action, "setSelectionSyncState", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var autoSync = root.TryGetProperty("autoSync", out var autoSyncProp) && autoSyncProp.GetBoolean();
+                        var lockSelection = root.TryGetProperty("lockSelection", out var lockProp) && lockProp.GetBoolean();
+                        WebViewPaneController.SetSelectionSyncState(autoSync, lockSelection);
+                        return;
+                    }
+
+                    if (string.Equals(action, "applySelectionScope", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.ApplySelectionScope,
+                            message);
+                        return;
+                    }
+
                     if (string.Equals(action, "getCategoryStats", StringComparison.OrdinalIgnoreCase))
                     {
                         WebViewPaneController.RequestParameterEditorOperation(
