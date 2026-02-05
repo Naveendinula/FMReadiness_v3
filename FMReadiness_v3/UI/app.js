@@ -30,6 +30,7 @@ const fullyReadySublabelEl = document.getElementById('fullyReadySublabel');
 const missingCountEl = document.getElementById('missingCount');
 const missingSublabelEl = document.getElementById('missingSublabel');
 const totalCountEl = document.getElementById('totalCount');
+const auditProfileLabelEl = document.getElementById('auditProfileLabel');
 const groupScoresEl = document.getElementById('groupScores');
 const searchInput = document.getElementById('searchInput');
 const showMissingOnly = document.getElementById('showMissingOnly');
@@ -41,9 +42,33 @@ const lockSelectionEl = document.getElementById('lockSelection');
 const selectionScopeEl = document.getElementById('selectionScope');
 const scopeCategoryEl = document.getElementById('scopeCategory');
 const applyScopeEl = document.getElementById('applyScope');
+const fixBannerEl = document.getElementById('fixBanner');
+const cobieSelectedPreviewEl = document.getElementById('cobieSelectedPreview');
+const cobieTypePreviewEl = document.getElementById('cobieTypePreview');
+const cobieCategoryPreviewEl = document.getElementById('cobieCategoryPreview');
+const legacySelectedPreviewEl = document.getElementById('legacySelectedPreview');
+const legacyCategoryPreviewEl = document.getElementById('legacyCategoryPreview');
+const legacyTypePreviewEl = document.getElementById('legacyTypePreview');
 
 // Cache of elementId -> views[]
 const viewsByElementId = new Map();
+const legacyDateFields = new Set(['FM_InstallationDate', 'FM_WarrantyStart', 'FM_WarrantyEnd']);
+const legacyFixKeyMap = {
+    edit_FM_Barcode: ['FM_Barcode', 'Component.TagNumber', 'Component.BarCode', 'COBie.Component.TagNumber', 'COBie.Component.BarCode'],
+    edit_FM_UniqueAssetId: ['FM_UniqueAssetId', 'Component.AssetIdentifier', 'COBie.Component.AssetIdentifier'],
+    edit_FM_InstallationDate: ['FM_InstallationDate', 'Component.InstallationDate', 'COBie.Component.InstallationDate'],
+    edit_FM_WarrantyStart: ['FM_WarrantyStart', 'Component.WarrantyStartDate', 'COBie.Component.WarrantyStartDate'],
+    edit_FM_WarrantyEnd: ['FM_WarrantyEnd', 'Component.WarrantyEndDate', 'COBie.Component.WarrantyEndDate'],
+    edit_FM_Criticality: ['FM_Criticality', 'FMOps.Criticality', 'COBie.FMOps.Criticality'],
+    edit_FM_Trade: ['FM_Trade', 'FMOps.Trade', 'COBie.FMOps.Trade'],
+    edit_FM_PMTemplateId: ['FM_PMTemplateId', 'FMOps.PMTemplateId', 'COBie.FMOps.PMTemplateId'],
+    edit_FM_PMFrequencyDays: ['FM_PMFrequencyDays', 'FMOps.PMFrequencyDays', 'COBie.FMOps.PMFrequencyDays'],
+    edit_FM_Building: ['FM_Building', 'FMOps.Building', 'COBie.FMOps.Building'],
+    edit_FM_LocationSpace: ['FM_LocationSpace', 'Component.Space', 'COBie.Component.Space'],
+    type_Manufacturer: ['Manufacturer', 'Type.Manufacturer'],
+    type_Model: ['Model', 'Type.ModelNumber'],
+    type_TypeMark: ['TypeMark', 'Type.TypeMark']
+};
 
 // Initialize WebView2 message listener
 if (window.chrome && window.chrome.webview) {
@@ -130,6 +155,11 @@ function render() {
         missingSublabelEl.textContent = `${missing} assets incomplete`;
 
         totalCountEl.textContent = totalAudited;
+        if (auditProfileLabelEl) {
+            auditProfileLabelEl.textContent = summary.auditProfile
+                ? `Audit profile: ${summary.auditProfile}`
+                : 'Audit profile: --';
+        }
 
         // Render group score badges
         renderGroupScores(summary.groupScores || {});
@@ -141,6 +171,9 @@ function render() {
         missingCountEl.textContent = '--';
         missingSublabelEl.textContent = '-- assets incomplete';
         totalCountEl.textContent = '--';
+        if (auditProfileLabelEl) {
+            auditProfileLabelEl.textContent = 'Audit profile: --';
+        }
         groupScoresEl.innerHTML = '';
     }
 
@@ -259,6 +292,8 @@ function renderTable(rows) {
         const readinessClass = getReadinessClass(row.readinessPercent);
         const groupBadgesHtml = renderRowGroupBadges(row.groupScores);
         const statusBadge = getStatusBadge(row.readinessPercent, row.missingCount);
+        const missingFields = normalizeMissingFieldEntries(row.missingFields, row.missingParams);
+        const canFix = row.missingCount > 0;
 
         tr.innerHTML = `
             <td>${row.elementId}</td>
@@ -275,7 +310,10 @@ function renderTable(rows) {
                 </select>
                 <button class="open-view-btn" data-element-id="${row.elementId}" disabled>Open</button>
             </td>
-            <td><button class="select-btn" data-id="${row.elementId}">Select</button></td>
+            <td>
+                <button class="select-btn" data-id="${row.elementId}">Select</button>
+                <button class="fix-btn" data-id="${row.elementId}" data-missing-fields="${encodeURIComponent(JSON.stringify(missingFields))}" ${canFix ? '' : 'disabled'}>Fix</button>
+            </td>
         `;
 
         tableBody.appendChild(tr);
@@ -315,6 +353,114 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function normalizeToken(value) {
+    if (value === undefined || value === null) return '';
+    return String(value).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function parseMissingFields(missingParams) {
+    if (!missingParams) return [];
+    return String(missingParams)
+        .split(',')
+        .map(x => x.replace(/\[[^\]]+\]/g, '').replace(/\(dup\)/gi, '').trim())
+        .filter(Boolean);
+}
+
+function normalizeMissingFieldEntries(missingFields, missingParams) {
+    const entries = [];
+
+    if (Array.isArray(missingFields) && missingFields.length > 0) {
+        missingFields.forEach(item => {
+            if (!item) return;
+
+            if (typeof item === 'string') {
+                const label = item.trim();
+                if (label) entries.push({ key: '', label, group: '', scope: '', required: false, reason: '' });
+                return;
+            }
+
+            const key = String(item.key || item.fieldKey || '').trim();
+            const label = String(item.label || item.fieldLabel || '').trim();
+            const group = String(item.group || '').trim();
+            const scope = String(item.scope || '').trim();
+            const reason = String(item.reason || '').trim();
+            const required = item.required === true;
+
+            if (!key && !label) return;
+            entries.push({ key, label, group, scope, required, reason });
+        });
+    }
+
+    if (entries.length === 0) {
+        parseMissingFields(missingParams).forEach(label => {
+            entries.push({ key: '', label, group: '', scope: '', required: false, reason: '' });
+        });
+    }
+
+    const deduped = new Map();
+    entries.forEach(entry => {
+        const dedupeKey = `${normalizeToken(entry.key)}|${normalizeToken(entry.label)}|${normalizeToken(entry.reason)}`;
+        if (!deduped.has(dedupeKey)) {
+            deduped.set(dedupeKey, entry);
+        }
+    });
+
+    return Array.from(deduped.values());
+}
+
+function createFixTargetMaps(entries) {
+    const tokenToTargetIds = new Map();
+    const targetLabelById = new Map();
+
+    entries.forEach((entry, index) => {
+        const key = normalizeToken(entry.key);
+        const reason = normalizeToken(entry.reason);
+        const targetId = `${key || `target-${index}`}|${reason}`;
+        const displayLabel = entry.label || entry.key || `Missing field ${index + 1}`;
+        targetLabelById.set(targetId, displayLabel);
+
+        [entry.key, entry.label].forEach(tokenValue => {
+            const token = normalizeToken(tokenValue);
+            if (!token) return;
+            if (!tokenToTargetIds.has(token)) {
+                tokenToTargetIds.set(token, new Set());
+            }
+            tokenToTargetIds.get(token).add(targetId);
+        });
+    });
+
+    return { tokenToTargetIds, targetLabelById };
+}
+
+function getInputFixTokens(input, labelEl) {
+    const tokens = new Set();
+    const addToken = (value) => {
+        const token = normalizeToken(value);
+        if (token) tokens.add(token);
+    };
+
+    addToken(labelEl?.textContent || '');
+    addToken(input?.dataset?.label || '');
+    addToken(input?.dataset?.cobieKey || '');
+    addToken(input?.dataset?.revitParam || '');
+
+    const inputId = input?.id || '';
+    addToken(inputId);
+
+    if (inputId.includes('_')) {
+        const suffix = inputId.substring(inputId.indexOf('_') + 1);
+        addToken(suffix);
+        addToken(suffix.replace(/_/g, '.'));
+    }
+
+    const mappedKeys = legacyFixKeyMap[inputId];
+    if (Array.isArray(mappedKeys)) {
+        mappedKeys.forEach(addToken);
+    }
+
+    return tokens;
+}
+
 /**
  * Send message to C# (Select + Zoom)
  */
@@ -343,6 +489,92 @@ function open2dView(elementId, viewId) {
             elementId: elementId,
             viewId: viewId
         });
+    }
+}
+
+function switchToEditorTab() {
+    const btn = document.querySelector('.tab-btn[data-tab="editor"]');
+    if (btn) btn.click();
+}
+
+function startFixFromAudit(elementId, missingFields) {
+    editorState.pendingFix = {
+        elementId: elementId,
+        missingFields: normalizeMissingFieldEntries(missingFields, null)
+    };
+    requestFixElementSelection(elementId);
+    switchToEditorTab();
+}
+
+function clearFixHighlights() {
+    document.querySelectorAll('.fix-target').forEach(el => el.classList.remove('fix-target'));
+}
+
+function applyFixTargets() {
+    const pending = editorState.pendingFix;
+    if (!pending || !editorState.selectedElements.some(e => e.elementId === pending.elementId)) {
+        if (fixBannerEl) fixBannerEl.classList.add('hidden');
+        clearFixHighlights();
+        return;
+    }
+
+    const entries = normalizeMissingFieldEntries(pending.missingFields, null);
+    pending.missingFields = entries;
+    clearFixHighlights();
+
+    if (entries.length === 0) {
+        if (fixBannerEl) {
+            fixBannerEl.textContent = `Fix mode: Element ${pending.elementId}. You can still edit any field, not just highlighted ones.`;
+            fixBannerEl.classList.remove('hidden');
+        }
+        return;
+    }
+
+    const { tokenToTargetIds, targetLabelById } = createFixTargetMaps(entries);
+    const matchedTargetIds = new Set();
+    let highlighted = 0;
+    const activeMode = document.querySelector('#tab-editor .editor-mode.active');
+    const targetRoot = activeMode || document.getElementById('tab-editor');
+    targetRoot?.querySelectorAll('.form-group').forEach(group => {
+        const labelEl = group.querySelector('label');
+        const input = group.querySelector('input, select');
+        if (!input) return;
+
+        const tokens = getInputFixTokens(input, labelEl);
+        let isMatch = false;
+        tokens.forEach(token => {
+            const targetIds = tokenToTargetIds.get(token);
+            if (!targetIds) return;
+            isMatch = true;
+            targetIds.forEach(id => matchedTargetIds.add(id));
+        });
+
+        if (isMatch) {
+            input.classList.add('fix-target');
+            highlighted++;
+        }
+    });
+
+    const unmatchedLabels = Array.from(targetLabelById.entries())
+        .filter(([id]) => !matchedTargetIds.has(id))
+        .map(([, label]) => label);
+
+    if (false && fixBannerEl) {
+        fixBannerEl.textContent = highlighted > 0
+            ? `Fix mode: Element ${pending.elementId} • Highlighted ${highlighted} audit-missing field(s). You can still edit any field.`
+            : `Fix mode: Element ${pending.elementId} • Audit-missing fields: ${(pending.missingFields || []).join(', ')}. You can still edit any field.`;
+        fixBannerEl.classList.remove('hidden');
+    }
+
+    if (fixBannerEl) {
+        const unmatchedSuffix = unmatchedLabels.length > 0
+            ? ` Not mapped in current editor: ${unmatchedLabels.slice(0, 3).join(', ')}${unmatchedLabels.length > 3 ? '…' : ''}.`
+            : '';
+
+        fixBannerEl.textContent = highlighted > 0
+            ? `Fix mode: Element ${pending.elementId}. Highlighted ${highlighted} field(s) matching ${matchedTargetIds.size}/${entries.length} audit-missing item(s). You can still edit any field.${unmatchedSuffix}`
+            : `Fix mode: Element ${pending.elementId}. Could not map audit-missing fields in the current editor.${unmatchedSuffix} You can still edit any field.`;
+        fixBannerEl.classList.remove('hidden');
     }
 }
 
@@ -397,11 +629,31 @@ tableBody.addEventListener('click', (e) => {
         if (!isNaN(elementId)) {
             selectElement(elementId);
         }
+        return;
+    }
+
+    const fixBtn = e.target.closest('.fix-btn');
+    if (fixBtn) {
+        const elementId = parseInt(fixBtn.dataset.id, 10);
+        if (!isNaN(elementId)) {
+            let missingFields = [];
+            try {
+                const raw = decodeURIComponent(fixBtn.dataset.missingFields || '');
+                missingFields = raw ? JSON.parse(raw) : [];
+            } catch {
+                missingFields = decodeURIComponent(fixBtn.dataset.missingFields || '')
+                    .split('|')
+                    .map(f => f.trim())
+                    .filter(Boolean);
+            }
+            startFixFromAudit(elementId, missingFields);
+        }
+        return;
     }
 
     // Clicking a row (but not the dropdown/select button) triggers 2D view request
     const row = e.target.closest('tr');
-    if (row && !e.target.closest('.select-btn') && !e.target.closest('.view-select')) {
+    if (row && !e.target.closest('.select-btn') && !e.target.closest('.fix-btn') && !e.target.closest('.view-select') && !e.target.closest('.open-view-btn')) {
         const firstCell = row.querySelector('td');
         const elementId = firstCell ? parseInt(firstCell.textContent, 10) : NaN;
         if (!isNaN(elementId) && !viewsByElementId.has(elementId)) {
@@ -473,6 +725,7 @@ let editorState = {
     selectedElements: [],
     currentTypeId: null,
     currentTypeInfo: null,
+    pendingFix: null,
     editorMode: 'cobie', // 'cobie' or 'legacy'
     cobieFields: {
         instance: [],
@@ -502,6 +755,9 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
         if (mode === 'cobie' && window.presetState.presetFields) {
             renderCobieEditorFields();
         }
+
+        applyFixTargets();
+        updateApplyPreviews();
     });
 });
 
@@ -591,6 +847,7 @@ function renderCobieEditorFields() {
     }
 
     applyCobieEditorEnabledState();
+    updateApplyPreviews();
 }
 
 function createCobieFieldInput(field, prefix) {
@@ -606,14 +863,14 @@ function createCobieFieldInput(field, prefix) {
     
     if (dataType === 'date') {
         placeholder = 'YYYY-MM-DD';
-        inputHtml = `<input type="text" id="${fieldId}" placeholder="${placeholder}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" class="cobie-field-input">`;
+        inputHtml = `<input type="text" id="${fieldId}" placeholder="${placeholder}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" data-label="${escapeHtml(label)}" data-type="${dataType}" data-required="${isRequired}" class="cobie-field-input">`;
     } else if (dataType === 'number') {
-        inputHtml = `<input type="number" id="${fieldId}" placeholder="${placeholder}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" class="cobie-field-input">`;
+        inputHtml = `<input type="number" id="${fieldId}" placeholder="${placeholder}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" data-label="${escapeHtml(label)}" data-type="${dataType}" data-required="${isRequired}" class="cobie-field-input">`;
     } else if (field.options && field.options.length > 0) {
         const optionsHtml = field.options.map(o => `<option value="${o}">${o}</option>`).join('');
-        inputHtml = `<select id="${fieldId}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" class="cobie-field-input"><option value="">Select...</option>${optionsHtml}</select>`;
+        inputHtml = `<select id="${fieldId}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" data-label="${escapeHtml(label)}" data-type="${dataType}" data-required="${isRequired}" class="cobie-field-input"><option value="">Select...</option>${optionsHtml}</select>`;
     } else {
-        inputHtml = `<input type="text" id="${fieldId}" placeholder="${placeholder}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" class="cobie-field-input">`;
+        inputHtml = `<input type="text" id="${fieldId}" placeholder="${placeholder}" data-cobie-key="${cobieKey}" data-revit-param="${field.revitParam || ''}" data-label="${escapeHtml(label)}" data-type="${dataType}" data-required="${isRequired}" class="cobie-field-input">`;
     }
     
     const aliasHint = aliases.length > 0 ? `<span class="alias-hint">Also: ${aliases.slice(0, 2).join(', ')}${aliases.length > 2 ? '...' : ''}</span>` : '';
@@ -710,6 +967,8 @@ function applyCobieEditorEnabledState() {
     if (notice) {
         notice.classList.toggle('hidden', enabled);
     }
+
+    updateApplyPreviews();
 }
 
 function setCobieFieldValues(elementIds, fieldValues, writeAliases) {
@@ -730,14 +989,22 @@ document.getElementById('applyCobieToSelected')?.addEventListener('click', () =>
         return;
     }
     
-    const fieldValues = collectCobieFieldValues('instance');
+    const { fieldValues, includedInputs } = collectCobieFieldValues('instance', true);
     if (Object.keys(fieldValues).length === 0) {
         showToast('No values to apply', 'warning');
+        return;
+    }
+
+    if (!validateCobieInputs(includedInputs)) {
+        showToast('Fix invalid field values before applying', 'error');
         return;
     }
     
     const writeAliases = document.getElementById('writeAliases')?.checked ?? true;
     const elementIds = editorState.selectedElements.map(e => e.elementId);
+
+    const message = `Apply ${Object.keys(fieldValues).length} field(s) to ${elementIds.length} selected element(s)?`;
+    if (!confirmSafeApply(message)) return;
     
     setCobieFieldValues(elementIds, fieldValues, writeAliases);
 });
@@ -749,13 +1016,21 @@ document.getElementById('applyCobieType')?.addEventListener('click', () => {
         return;
     }
     
-    const fieldValues = collectCobieFieldValues('type');
+    const { fieldValues, includedInputs } = collectCobieFieldValues('type', true);
     if (Object.keys(fieldValues).length === 0) {
         showToast('No values to apply', 'warning');
         return;
     }
+
+    if (!validateCobieInputs(includedInputs)) {
+        showToast('Fix invalid field values before applying', 'error');
+        return;
+    }
     
     const writeAliases = document.getElementById('writeAliases')?.checked ?? true;
+    const affected = editorState.currentTypeInfo?.typeInstanceCount || '?';
+    const message = `Apply ${Object.keys(fieldValues).length} type field(s)? This affects ${affected} instance(s).`;
+    if (!confirmSafeApply(message)) return;
     
     // Use type-specific action
     if (window.chrome && window.chrome.webview) {
@@ -776,14 +1051,24 @@ document.getElementById('applyCobieToCategory')?.addEventListener('click', () =>
         return;
     }
     
-    const fieldValues = collectCobieFieldValues('bulk');
+    const { fieldValues, includedInputs } = collectCobieFieldValues('bulk', true);
     if (Object.keys(fieldValues).length === 0) {
         showToast('No values to apply', 'warning');
+        return;
+    }
+
+    if (!validateCobieInputs(includedInputs)) {
+        showToast('Fix invalid field values before applying', 'error');
         return;
     }
     
     const onlyBlanks = document.getElementById('cobieOnlyFillBlanks')?.checked ?? true;
     const writeAliases = document.getElementById('writeAliases')?.checked ?? true;
+    const targetCount = readElementCount('cobieCategoryCount');
+    const scopeText = targetCount !== null ? `${targetCount} element(s)` : 'selected category elements';
+    const modeText = onlyBlanks ? 'Fill blank values only' : 'Overwrite existing values';
+    const message = `Apply ${Object.keys(fieldValues).length} field(s) to ${scopeText}? ${modeText}.`;
+    if (!confirmSafeApply(message)) return;
     
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.postMessage({
@@ -796,51 +1081,219 @@ document.getElementById('applyCobieToCategory')?.addEventListener('click', () =>
     }
 });
 
-function collectCobieFieldValues(prefix) {
+function collectCobieFieldValues(prefix, includeMetadata = false) {
     const fieldValues = {};
+    const includedInputs = [];
     const inputs = document.querySelectorAll(`#cobie${capitalize(prefix)}FieldsGrid .cobie-field-input, #cobie${capitalize(prefix)}Form .cobie-field-input`);
     
     // Fallback for bulk fields which might be in a different container
     const bulkInputs = prefix === 'bulk' ? document.querySelectorAll('#cobieBulkFieldsGrid .cobie-field-input') : [];
     const allInputs = inputs.length > 0 ? inputs : bulkInputs;
     
-    // In multi-select mode, only collect fields the user actually modified
-    const isMultiSelect = editorState.selectedElements.length > 1;
-    
     allInputs.forEach(input => {
         const value = input.value?.trim();
         const cobieKey = input.dataset.cobieKey;
         const revitParam = input.dataset.revitParam;
+        const isModified = input.getAttribute('data-user-modified') === 'true';
         
         if (!cobieKey && !revitParam) return;
         
-        // In multi-select: only include if user modified the field, OR if it has a value (single select)
-        if (isMultiSelect) {
-            // Only send if user explicitly modified this field
-            if (input.getAttribute('data-user-modified') === 'true' && value) {
-                fieldValues[cobieKey || revitParam] = {
-                    value: value,
-                    cobieKey: cobieKey,
-                    revitParam: revitParam
-                };
-            }
-        } else {
-            // Single select: send all non-empty values
-            if (value) {
-                fieldValues[cobieKey || revitParam] = {
-                    value: value,
-                    cobieKey: cobieKey,
-                    revitParam: revitParam
-                };
-            }
+        if (isModified && value) {
+            fieldValues[cobieKey || revitParam] = {
+                value: value,
+                cobieKey: cobieKey,
+                revitParam: revitParam
+            };
+            includedInputs.push(input);
         }
     });
     
+    if (includeMetadata) {
+        return { fieldValues, includedInputs };
+    }
     return fieldValues;
 }
 
 function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function confirmSafeApply(message) {
+    if (typeof window.confirm !== 'function') return true;
+    return window.confirm(message);
+}
+
+function readElementCount(elementId) {
+    const text = document.getElementById(elementId)?.textContent || '';
+    const match = text.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+}
+
+function isIsoDate(value) {
+    const trimmed = (value || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
+    const date = new Date(`${trimmed}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return false;
+    return date.toISOString().startsWith(trimmed);
+}
+
+function validateCobieInput(input) {
+    const value = input?.value?.trim() || '';
+    const dataType = (input?.dataset?.type || 'string').toLowerCase();
+
+    if (!value) {
+        input?.classList.remove('invalid-value');
+        return true;
+    }
+
+    let valid = true;
+    if (dataType === 'date') {
+        valid = isIsoDate(value);
+    } else if (dataType === 'number') {
+        valid = Number.isFinite(Number(value));
+    }
+
+    input?.classList.toggle('invalid-value', !valid);
+    return valid;
+}
+
+function validateCobieInputs(inputs) {
+    if (!Array.isArray(inputs) || inputs.length === 0) return true;
+    return inputs.every(validateCobieInput);
+}
+
+function validateLegacyInput(fieldName, input) {
+    if (!input) return true;
+    const value = input.value?.trim() || '';
+
+    if (!value) {
+        input.classList.remove('invalid-value');
+        return true;
+    }
+
+    let valid = true;
+    if (legacyDateFields.has(fieldName)) {
+        valid = isIsoDate(value);
+    } else if (fieldName === 'FM_PMFrequencyDays') {
+        valid = Number.isInteger(Number(value)) && Number(value) > 0;
+    }
+
+    input.classList.toggle('invalid-value', !valid);
+    return valid;
+}
+
+function collectLegacySelectedParams() {
+    const params = {};
+    const includedInputs = [];
+    const fields = ['FM_Barcode', 'FM_UniqueAssetId', 'FM_InstallationDate', 'FM_WarrantyStart',
+        'FM_WarrantyEnd', 'FM_Criticality', 'FM_Trade', 'FM_PMTemplateId',
+        'FM_PMFrequencyDays', 'FM_Building', 'FM_LocationSpace'];
+
+    fields.forEach(field => {
+        const input = document.getElementById(`edit_${field}`);
+        if (!input) return;
+        const value = input.value?.trim() || '';
+        if (!value) return;
+        if (input.getAttribute('data-user-modified') !== 'true') return;
+
+        params[field] = value;
+        includedInputs.push({ field, input });
+    });
+
+    return { params, includedInputs };
+}
+
+function collectLegacyCategoryParams() {
+    const params = {};
+    const includedInputs = [];
+    const fields = ['FM_Building', 'FM_Trade', 'FM_PMFrequencyDays', 'FM_Criticality'];
+
+    fields.forEach(field => {
+        const input = document.getElementById(`bulk_${field}`);
+        if (!input) return;
+        const value = input.value?.trim() || '';
+        if (!value) return;
+        if (input.getAttribute('data-user-modified') !== 'true') return;
+        params[field] = value;
+        includedInputs.push({ field, input });
+    });
+
+    return { params, includedInputs };
+}
+
+function collectLegacyTypeParams() {
+    const params = {};
+    const manufacturer = document.getElementById('type_Manufacturer');
+    const model = document.getElementById('type_Model');
+    const typeMark = document.getElementById('type_TypeMark');
+
+    if (manufacturer?.value?.trim() && manufacturer.getAttribute('data-user-modified') === 'true') params.Manufacturer = manufacturer.value.trim();
+    if (model?.value?.trim() && model.getAttribute('data-user-modified') === 'true') params.Model = model.value.trim();
+    if (typeMark?.value?.trim() && typeMark.getAttribute('data-user-modified') === 'true') params.TypeMark = typeMark.value.trim();
+
+    return params;
+}
+
+function updateApplyPreviews() {
+    const selectedCount = editorState.selectedElements.length;
+    const categoryCount = readElementCount('categoryCount');
+    const cobieCategoryCount = readElementCount('cobieCategoryCount');
+    const legacySelected = collectLegacySelectedParams();
+    const legacyCategory = collectLegacyCategoryParams();
+    const legacyType = collectLegacyTypeParams();
+    const cobieSelected = collectCobieFieldValues('instance', true);
+    const cobieType = collectCobieFieldValues('type', true);
+    const cobieCategory = collectCobieFieldValues('bulk', true);
+
+    if (legacySelectedPreviewEl) {
+        legacySelectedPreviewEl.textContent = selectedCount > 0 && Object.keys(legacySelected.params).length > 0
+            ? `Will update ${Object.keys(legacySelected.params).length} field(s) on ${selectedCount} element(s).`
+            : '';
+    }
+
+    if (legacyCategoryPreviewEl) {
+        const categoryValue = document.getElementById('bulkCategory')?.value || '';
+        if (categoryValue && Object.keys(legacyCategory.params).length > 0) {
+            const mode = document.getElementById('onlyFillBlanks')?.checked ? 'fill blanks only' : 'overwrite';
+            legacyCategoryPreviewEl.textContent = categoryCount !== null
+                ? `Will update ${Object.keys(legacyCategory.params).length} field(s) on ${categoryCount} element(s) (${mode}).`
+                : `Will update ${Object.keys(legacyCategory.params).length} field(s) (${mode}).`;
+        } else {
+            legacyCategoryPreviewEl.textContent = '';
+        }
+    }
+
+    if (legacyTypePreviewEl) {
+        const affected = editorState.currentTypeInfo?.typeInstanceCount || null;
+        legacyTypePreviewEl.textContent = editorState.currentTypeId && Object.keys(legacyType).length > 0
+            ? `Will update ${Object.keys(legacyType).length} field(s)${affected ? ` affecting ${affected} instance(s)` : ''}.`
+            : '';
+    }
+
+    if (cobieSelectedPreviewEl) {
+        cobieSelectedPreviewEl.textContent = selectedCount > 0 && Object.keys(cobieSelected.fieldValues).length > 0
+            ? `Will update ${Object.keys(cobieSelected.fieldValues).length} field(s) on ${selectedCount} element(s).`
+            : '';
+    }
+
+    if (cobieTypePreviewEl) {
+        const affected = editorState.currentTypeInfo?.typeInstanceCount || null;
+        cobieTypePreviewEl.textContent = editorState.currentTypeId && Object.keys(cobieType.fieldValues).length > 0
+            ? `Will update ${Object.keys(cobieType.fieldValues).length} field(s)${affected ? ` affecting ${affected} instance(s)` : ''}.`
+            : '';
+    }
+
+    if (cobieCategoryPreviewEl) {
+        const categoryValue = document.getElementById('cobieBulkCategory')?.value || '';
+        if (categoryValue && Object.keys(cobieCategory.fieldValues).length > 0) {
+            const mode = document.getElementById('cobieOnlyFillBlanks')?.checked ? 'fill blanks only' : 'overwrite';
+            cobieCategoryPreviewEl.textContent = cobieCategoryCount !== null
+                ? `Will update ${Object.keys(cobieCategory.fieldValues).length} field(s) on ${cobieCategoryCount} element(s) (${mode}).`
+                : `Will update ${Object.keys(cobieCategory.fieldValues).length} field(s) (${mode}).`;
+        } else {
+            cobieCategoryPreviewEl.textContent = '';
+        }
+    }
 }
 
 // ========================================
@@ -866,6 +1319,8 @@ function populateCobieFieldsFromElement(element) {
                     (field.aliasParams || []).map(a => instanceParams[a]).find(v => v);
         
         input.value = value || '';
+        input.classList.remove('fix-target');
+        input.removeAttribute('data-user-modified');
         
         // Update visual state
         if (field.required && !value) {
@@ -877,6 +1332,8 @@ function populateCobieFieldsFromElement(element) {
         } else {
             input.classList.remove('has-value', 'missing-required');
         }
+
+        validateCobieInput(input);
     });
     
     // Populate type fields
@@ -889,6 +1346,9 @@ function populateCobieFieldsFromElement(element) {
                     (field.aliasParams || []).map(a => typeParams[a]).find(v => v);
         
         input.value = value || '';
+        input.classList.remove('fix-target');
+        input.removeAttribute('data-user-modified');
+        validateCobieInput(input);
     });
     
     // Update computed values for COBie editor
@@ -910,6 +1370,7 @@ document.getElementById('cobieBulkCategory')?.addEventListener('change', (e) => 
     } else {
         document.getElementById('cobieCategoryCount').textContent = '';
     }
+    updateApplyPreviews();
 });
 
 // Copy computed values for COBie
@@ -990,6 +1451,15 @@ function requestSelectedElements() {
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.postMessage({
             action: 'getSelectedElements'
+        });
+    }
+}
+
+function requestFixElementSelection(elementId) {
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'focusFixElement',
+            elementId: elementId
         });
     }
 }
@@ -1097,6 +1567,8 @@ function copyComputedToParam(elementIds, sourceField, targetParam) {
 function receiveSelectedElementsData(msg) {
     const elements = msg.elements || [];
     editorState.selectedElements = elements;
+    editorState.currentTypeId = null;
+    editorState.currentTypeInfo = null;
     
     const infoEl = document.getElementById('selectedElementInfo');
     const formEl = document.getElementById('instanceParamsForm');
@@ -1109,6 +1581,8 @@ function receiveSelectedElementsData(msg) {
     const cobieTypeForm = document.getElementById('cobieTypeForm');
     
     if (elements.length === 0) {
+        editorState.currentTypeId = null;
+        editorState.currentTypeInfo = null;
         infoEl.innerHTML = '<p class="placeholder-text">No elements selected. Select elements in Revit or use Scope.</p>';
         formEl?.classList.add('hidden');
         typeInfoEl.innerHTML = '<p class="placeholder-text">Select an element to edit its type parameters</p>';
@@ -1123,6 +1597,8 @@ function receiveSelectedElementsData(msg) {
         document.getElementById('multiSelectLegend')?.classList.add('hidden');
         
         clearComputedValues();
+        applyFixTargets();
+        updateApplyPreviews();
         return;
     }
     
@@ -1184,6 +1660,12 @@ function receiveSelectedElementsData(msg) {
             document.getElementById('type_Manufacturer').value = tp.Manufacturer || '';
             document.getElementById('type_Model').value = tp.Model || '';
             document.getElementById('type_TypeMark').value = tp.TypeMark || '';
+            ['type_Manufacturer', 'type_Model', 'type_TypeMark'].forEach(id => {
+                const input = document.getElementById(id);
+                if (!input) return;
+                input.removeAttribute('data-user-modified');
+                input.classList.remove('invalid-value', 'fix-target');
+            });
             document.getElementById('typeImpact').textContent = `Will update ${el.typeInstanceCount || '?'} instances`;
             
             // COBie type info
@@ -1242,6 +1724,8 @@ function receiveSelectedElementsData(msg) {
             cobieTypeForm?.classList.remove('hidden');
         } else {
             // Different types - disable type editing
+            editorState.currentTypeId = null;
+            editorState.currentTypeInfo = null;
             typeInfoEl.innerHTML = `<p class="placeholder-text multi-type-warning">⚠ ${typeIds.length} different types selected - type editing disabled</p>`;
             typeFormEl?.classList.add('hidden');
             
@@ -1252,6 +1736,9 @@ function receiveSelectedElementsData(msg) {
         // Clear computed values for multi-select (they vary per element)
         clearComputedValues();
     }
+
+    applyFixTargets();
+    updateApplyPreviews();
 }
 
 // ========================================
@@ -1317,7 +1804,7 @@ function populateMultiSelectFields(elements) {
  */
 function applyMultiSelectValueToInput(input, info, totalCount) {
     // Reset state
-    input.classList.remove('common-value', 'varies-value', 'all-blank');
+    input.classList.remove('common-value', 'varies-value', 'all-blank', 'invalid-value');
     input.removeAttribute('data-original-value');
     input.removeAttribute('data-user-modified');
     
@@ -1346,8 +1833,10 @@ function applyMultiSelectValueToInput(input, info, totalCount) {
 }
 
 function markFieldAsModified(e) {
-    e.target.setAttribute('data-user-modified', 'true');
-    e.target.classList.add('user-modified');
+    const target = e?.target || e;
+    if (!target || typeof target.setAttribute !== 'function') return;
+    target.setAttribute('data-user-modified', 'true');
+    target.classList.add('user-modified');
 }
 
 /**
@@ -1384,6 +1873,8 @@ function populateTypeFieldsFromMultiSelect(elements) {
         const info = typeComparison[fieldName] || { value: null, varies: false };
         // Type params should be same across all instances of same type
         input.value = info.value || '';
+        input.removeAttribute('data-user-modified');
+        input.classList.remove('invalid-value', 'fix-target');
     });
     
     const impactEl = document.getElementById('typeImpact');
@@ -1400,6 +1891,8 @@ function populateTypeFieldsFromMultiSelect(elements) {
         
         const info = cobieTypeComparison[field.cobieKey] || { value: null, varies: false };
         input.value = info.value || '';
+        input.removeAttribute('data-user-modified');
+        input.classList.remove('invalid-value', 'fix-target');
     });
     
     const cobieImpactEl = document.getElementById('cobieTypeImpact');
@@ -1413,17 +1906,28 @@ function populateTypeFieldsFromMultiSelect(elements) {
  */
 function populateLegacyFieldsFromElement(el) {
     const ip = el.instanceParams || {};
-    document.getElementById('edit_FM_Barcode').value = ip.FM_Barcode || '';
-    document.getElementById('edit_FM_UniqueAssetId').value = ip.FM_UniqueAssetId || '';
-    document.getElementById('edit_FM_InstallationDate').value = ip.FM_InstallationDate || '';
-    document.getElementById('edit_FM_WarrantyStart').value = ip.FM_WarrantyStart || '';
-    document.getElementById('edit_FM_WarrantyEnd').value = ip.FM_WarrantyEnd || '';
-    document.getElementById('edit_FM_Criticality').value = ip.FM_Criticality || '';
-    document.getElementById('edit_FM_Trade').value = ip.FM_Trade || '';
-    document.getElementById('edit_FM_PMTemplateId').value = ip.FM_PMTemplateId || '';
-    document.getElementById('edit_FM_PMFrequencyDays').value = ip.FM_PMFrequencyDays || '';
-    document.getElementById('edit_FM_Building').value = ip.FM_Building || '';
-    document.getElementById('edit_FM_LocationSpace').value = ip.FM_LocationSpace || '';
+    const mappings = {
+        FM_Barcode: ip.FM_Barcode,
+        FM_UniqueAssetId: ip.FM_UniqueAssetId,
+        FM_InstallationDate: ip.FM_InstallationDate,
+        FM_WarrantyStart: ip.FM_WarrantyStart,
+        FM_WarrantyEnd: ip.FM_WarrantyEnd,
+        FM_Criticality: ip.FM_Criticality,
+        FM_Trade: ip.FM_Trade,
+        FM_PMTemplateId: ip.FM_PMTemplateId,
+        FM_PMFrequencyDays: ip.FM_PMFrequencyDays,
+        FM_Building: ip.FM_Building,
+        FM_LocationSpace: ip.FM_LocationSpace
+    };
+
+    Object.entries(mappings).forEach(([field, value]) => {
+        const input = document.getElementById(`edit_${field}`);
+        if (!input) return;
+        input.value = value || '';
+        input.classList.remove('fix-target');
+        input.removeAttribute('data-user-modified');
+        validateLegacyInput(field, input);
+    });
     
     // Update computed values
     const computed = el.computed || {};
@@ -1435,7 +1939,8 @@ function populateLegacyFieldsFromElement(el) {
 function clearCobieInstanceForm() {
     document.querySelectorAll('.cobie-field-input').forEach(input => {
         input.value = '';
-        input.classList.remove('has-value', 'missing-required');
+        input.classList.remove('has-value', 'missing-required', 'invalid-value', 'fix-target');
+        input.removeAttribute('data-user-modified');
     });
     
     // Clear COBie computed values
@@ -1463,6 +1968,8 @@ function receiveCategoryStats(msg) {
     } else if (cobieCountEl) {
         cobieCountEl.textContent = '';
     }
+
+    updateApplyPreviews();
 }
 
 function receiveOperationResult(msg) {
@@ -1474,6 +1981,8 @@ function receiveOperationResult(msg) {
         // Trigger audit refresh to update the Audit Results tab
         requestAuditRefresh();
     }
+
+    updateApplyPreviews();
 }
 
 /**
@@ -1489,17 +1998,25 @@ function requestAuditRefresh() {
 }
 
 function clearInstanceForm() {
-    document.getElementById('edit_FM_Barcode').value = '';
-    document.getElementById('edit_FM_UniqueAssetId').value = '';
-    document.getElementById('edit_FM_InstallationDate').value = '';
-    document.getElementById('edit_FM_WarrantyStart').value = '';
-    document.getElementById('edit_FM_WarrantyEnd').value = '';
-    document.getElementById('edit_FM_Criticality').value = '';
-    document.getElementById('edit_FM_Trade').value = '';
-    document.getElementById('edit_FM_PMTemplateId').value = '';
-    document.getElementById('edit_FM_PMFrequencyDays').value = '';
-    document.getElementById('edit_FM_Building').value = '';
-    document.getElementById('edit_FM_LocationSpace').value = '';
+    [
+        'edit_FM_Barcode',
+        'edit_FM_UniqueAssetId',
+        'edit_FM_InstallationDate',
+        'edit_FM_WarrantyStart',
+        'edit_FM_WarrantyEnd',
+        'edit_FM_Criticality',
+        'edit_FM_Trade',
+        'edit_FM_PMTemplateId',
+        'edit_FM_PMFrequencyDays',
+        'edit_FM_Building',
+        'edit_FM_LocationSpace'
+    ].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = '';
+        el.classList.remove('invalid-value', 'fix-target');
+        el.removeAttribute('data-user-modified');
+    });
 }
 
 function clearComputedValues() {
@@ -1523,6 +2040,35 @@ function showToast(message, type = 'info') {
 // ========================================
 // Parameter Editor - Event Handlers
 // ========================================
+
+document.getElementById('tab-editor')?.addEventListener('input', (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+
+    if (target.type !== 'checkbox' && (target.classList.contains('cobie-field-input') || target.id?.startsWith('edit_') || target.id?.startsWith('bulk_') || target.id?.startsWith('type_'))) {
+        markFieldAsModified(target);
+    }
+
+    if (target.classList.contains('cobie-field-input')) {
+        validateCobieInput(target);
+    } else if (target.id?.startsWith('edit_')) {
+        validateLegacyInput(target.id.replace('edit_', ''), target);
+    } else if (target.id?.startsWith('bulk_')) {
+        validateLegacyInput(target.id.replace('bulk_', ''), target);
+    }
+
+    updateApplyPreviews();
+});
+
+document.getElementById('tab-editor')?.addEventListener('change', (e) => {
+    const target = e.target;
+    if ((target instanceof HTMLInputElement || target instanceof HTMLSelectElement)
+        && target.type !== 'checkbox'
+        && (target.classList.contains('cobie-field-input') || target.id?.startsWith('edit_') || target.id?.startsWith('bulk_') || target.id?.startsWith('type_'))) {
+        markFieldAsModified(target);
+    }
+    updateApplyPreviews();
+});
 
 autoSyncSelectionEl?.addEventListener('change', () => {
     setSelectionSyncState();
@@ -1552,24 +2098,22 @@ document.getElementById('applyToSelected')?.addEventListener('click', () => {
         return;
     }
     
-    const params = {};
-    const fields = ['FM_Barcode', 'FM_UniqueAssetId', 'FM_InstallationDate', 'FM_WarrantyStart', 
-                    'FM_WarrantyEnd', 'FM_Criticality', 'FM_Trade', 'FM_PMTemplateId', 
-                    'FM_PMFrequencyDays', 'FM_Building', 'FM_LocationSpace'];
-    
-    fields.forEach(field => {
-        const el = document.getElementById(`edit_${field}`);
-        if (el && el.value.trim() !== '') {
-            params[field] = el.value.trim();
-        }
-    });
+    const { params, includedInputs } = collectLegacySelectedParams();
     
     if (Object.keys(params).length === 0) {
         showToast('No values to apply', 'error');
         return;
     }
+
+    const allValid = includedInputs.every(item => validateLegacyInput(item.field, item.input));
+    if (!allValid) {
+        showToast('Fix invalid field values before applying', 'error');
+        return;
+    }
     
     const elementIds = editorState.selectedElements.map(e => e.elementId);
+    const message = `Apply ${Object.keys(params).length} field(s) to ${elementIds.length} selected element(s)?`;
+    if (!confirmSafeApply(message)) return;
     setInstanceParams(elementIds, params);
 });
 
@@ -1581,6 +2125,7 @@ document.getElementById('bulkCategory')?.addEventListener('change', (e) => {
     } else {
         document.getElementById('categoryCount').textContent = '';
     }
+    updateApplyPreviews();
 });
 
 // Apply to Category button
@@ -1591,22 +2136,25 @@ document.getElementById('applyToCategory')?.addEventListener('click', () => {
         return;
     }
     
-    const params = {};
-    const fields = ['FM_Building', 'FM_Trade', 'FM_PMFrequencyDays', 'FM_Criticality'];
-    
-    fields.forEach(field => {
-        const el = document.getElementById(`bulk_${field}`);
-        if (el && el.value.trim() !== '') {
-            params[field] = el.value.trim();
-        }
-    });
+    const { params, includedInputs } = collectLegacyCategoryParams();
     
     if (Object.keys(params).length === 0) {
         showToast('No values to apply', 'error');
         return;
     }
+
+    const allValid = includedInputs.every(item => validateLegacyInput(item.field, item.input));
+    if (!allValid) {
+        showToast('Fix invalid field values before applying', 'error');
+        return;
+    }
     
     const onlyBlanks = document.getElementById('onlyFillBlanks').checked;
+    const targetCount = readElementCount('categoryCount');
+    const modeText = onlyBlanks ? 'Fill blank values only' : 'Overwrite existing values';
+    const scopeText = targetCount !== null ? `${targetCount} element(s)` : 'selected category elements';
+    const message = `Apply ${Object.keys(params).length} field(s) to ${scopeText}? ${modeText}.`;
+    if (!confirmSafeApply(message)) return;
     setCategoryParams(category, params, onlyBlanks);
 });
 
@@ -1617,19 +2165,16 @@ document.getElementById('updateType')?.addEventListener('click', () => {
         return;
     }
     
-    const params = {};
-    const manufacturer = document.getElementById('type_Manufacturer').value.trim();
-    const model = document.getElementById('type_Model').value.trim();
-    const typeMark = document.getElementById('type_TypeMark').value.trim();
-    
-    if (manufacturer) params.Manufacturer = manufacturer;
-    if (model) params.Model = model;
-    if (typeMark) params.TypeMark = typeMark;
+    const params = collectLegacyTypeParams();
     
     if (Object.keys(params).length === 0) {
         showToast('No values to update', 'error');
         return;
     }
+
+    const affected = editorState.currentTypeInfo?.typeInstanceCount || '?';
+    const message = `Apply ${Object.keys(params).length} type field(s)? This affects ${affected} instance(s).`;
+    if (!confirmSafeApply(message)) return;
     
     setTypeParams(editorState.currentTypeId, params);
 });
@@ -1723,6 +2268,7 @@ function receivePresetLoaded(msg) {
         applyCobieEditorEnabledState();
         showToast(`Loaded preset: ${msg.preset.name}`, 'success');
         requestPresetFields();
+        requestAuditRefresh();
     } else {
         showToast('Failed to load preset', 'error');
     }
@@ -1959,3 +2505,4 @@ requestPresetFields();
 
 // Initial render
 render();
+updateApplyPreviews();

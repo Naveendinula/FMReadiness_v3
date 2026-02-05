@@ -155,6 +155,8 @@ namespace FMReadiness_v3.Services
         public string Scope { get; set; } = "instance"; // instance | type | either
         [DataMember(Name = "source")]
         public FieldSource Source { get; set; } = new();
+        [DataMember(Name = "required")]
+        public bool? Required { get; set; }
         [DataMember(Name = "rules")]
         public List<string> Rules { get; set; } = new();
     }

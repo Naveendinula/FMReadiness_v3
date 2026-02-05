@@ -214,6 +214,7 @@ namespace FMReadiness_v3.Services
                 Key = cobieField.CobieKey ?? string.Empty,
                 Label = cobieField.Label ?? string.Empty,
                 Scope = cobieField.Scope ?? "instance",
+                Required = cobieField.Required,
                 Rules = cobieField.Rules ?? new List<string>(),
                 Source = new FieldSource()
             };

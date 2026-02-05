@@ -21,9 +21,11 @@ namespace FMReadiness_v3.Services
 
     public class MissingFieldInfo
     {
+        public string FieldKey { get; set; } = string.Empty;
         public string Group { get; set; } = string.Empty;
+        public string Scope { get; set; } = string.Empty;
+        public bool Required { get; set; }
         public string FieldLabel { get; set; } = string.Empty;
         public string? Reason { get; set; }
     }
 }
-

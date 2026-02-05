@@ -6,6 +6,7 @@ Revit add-in for auditing Facility Management (FM) data completeness, editing ke
 - **Audit FM readiness** across supported categories and show results in a dockable UI.
 - **Highlight missing instance/type data** and compute readiness scores per element and group.
 - **Edit FM parameters in bulk** (selected elements or by category) directly in Revit.
+- **Auto-sync selection + scope picker** to build selection sets (active view, selected type, category).
 - **Export a `.fm_params.json` sidecar** keyed by IFC GlobalId for DigitalTwin viewers.
 - **COBie 2.4 support** with presets for field mapping, aliases, and validation.
 
@@ -227,7 +228,8 @@ Example structure:
 ## UI overview
 The dockable pane (WebView2) provides:
 - **Audit Results**: summary metrics, group scores, searchable table of missing data.
-- **Parameter Editor**: update FM instance parameters for selected elements.
+- **Parameter Editor**: update FM instance parameters for selected elements with live selection sync.
+- **Selection controls**: Auto-sync, Lock selection, Refresh, and Scope picker (current selection, active view, selected type, category).
 - **Category Bulk Fill**: apply values across a category (optional fill-only-blank).
 - **Type Parameters**: edit Manufacturer/Model/Type Mark.
 - **Computed values**: UniqueId, Level, Room/Space helpers.

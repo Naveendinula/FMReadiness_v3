@@ -31,14 +31,19 @@ namespace FMReadiness_v3.Commands
 
             try
             {
-                var checklist = new ChecklistService();
-                if (!checklist.LoadConfig()) return;
+                var resolver = new AuditProfileResolverService();
+                if (!resolver.TryResolveRules(out var rules, out var profileName, out var errorMessage))
+                {
+                    TaskDialog.Show("FM Readiness", errorMessage);
+                    return;
+                }
 
                 var collector = new CollectorService(doc);
                 var elements = collector.GetAllFmElements();
 
                 var auditService = new AuditService();
-                var report = auditService.RunFullAudit(doc, elements, checklist.Rules);
+                var report = auditService.RunFullAudit(doc, elements, rules);
+                report.AuditProfileName = profileName;
 
                 WebViewPaneController.UpdateFromReport(report);
 
@@ -64,6 +69,7 @@ namespace FMReadiness_v3.Commands
 
                 var message =
                     "FM Readiness Summary\n" +
+                    $"Audit profile: {profileName}\n" +
                     $"Overall readiness: {Math.Round(readinessPct, 0)}%\n" +
                     $"Fully ready assets: {ready} / {total}\n\n" +
                     "-----------------------------------\n\n" +

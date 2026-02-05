@@ -24,13 +24,16 @@
         <!-- Header with Preset Selector -->
         <header class="header">
             <h1>FM Readiness</h1>
-            <div class="preset-selector">
-                <label for="presetDropdown">Preset:</label>
-                <select id="presetDropdown">
-                    <option value="cobie-core.json">COBie Core</option>
-                    <option value="fm-legacy.json">FM Legacy</option>
-                </select>
-                <button class="btn-icon btn-sm" id="refreshPresets" title="Refresh presets">⟳</button>
+            <div class="header-meta">
+                <div class="preset-selector">
+                    <label for="presetDropdown">Preset:</label>
+                    <select id="presetDropdown">
+                        <option value="cobie-core.json">COBie Core</option>
+                        <option value="fm-legacy.json">FM Legacy</option>
+                    </select>
+                    <button class="btn-icon btn-sm" id="refreshPresets" title="Refresh presets">⟳</button>
+                </div>
+                <div class="audit-profile-label" id="auditProfileLabel">Audit profile: --</div>
             </div>
         </header>
 
@@ -96,7 +99,7 @@
                                 <th>Groups</th>
                                 <th>Missing</th>
                                 <th>View</th>
-                                <th></th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="tableBody">
@@ -135,7 +138,7 @@
                             Auto-sync
                         </label>
                         <label class="checkbox-label">
-                            <input type="checkbox" id="lockSelection" title="Freeze the current selection while you edit fields">
+                            <input type="checkbox" id="lockSelection" checked title="Freeze the current selection while you edit fields">
                             Lock selection
                         </label>
                     </div>
@@ -172,6 +175,7 @@
                 <div id="selectedElementInfo" class="selection-info">
                     <p class="placeholder-text">Select elements in Revit to begin</p>
                 </div>
+                <div id="fixBanner" class="fix-banner hidden"></div>
                 <!-- Multi-select legend (shown when multiple elements selected) -->
                 <div id="multiSelectLegend" class="multi-select-legend hidden">
                     <span class="legend-item"><span class="legend-swatch common"></span> Same value</span>
@@ -185,7 +189,7 @@
                 <div class="ensure-bar">
                     <button class="btn-secondary btn-sm" id="ensureCobieParams">Ensure COBie Parameters</button>
                     <label class="checkbox-label ensure-cleanup-toggle" title="Removes FM_ parameters from the project">
-                        <input type="checkbox" id="removeFmAliases">
+                        <input type="checkbox" id="removeFmAliases" checked>
                         Remove FM_ parameters
                     </label>
                     <span class="ensure-note">Adds COBie fields to Identity Data.</span>
@@ -204,6 +208,7 @@
                         </div>
                         <div class="form-actions">
                             <button class="btn-primary" id="applyCobieToSelected">Apply to Selected</button>
+                            <span class="preview-note" id="cobieSelectedPreview"></span>
                             <span class="form-hint">Fields with <span class="required-badge">●</span> are required for COBie</span>
                         </div>
                     </div>
@@ -223,6 +228,7 @@
                         </div>
                         <div class="form-actions">
                             <button class="btn-primary" id="applyCobieType">Update Type</button>
+                            <span class="preview-note" id="cobieTypePreview"></span>
                             <span id="cobieTypeImpact" class="impact-info"></span>
                         </div>
                     </div>
@@ -257,6 +263,7 @@
                         </div>
                         <div class="form-actions">
                             <button class="btn-primary" id="applyCobieToCategory">Apply to Category</button>
+                            <span class="preview-note" id="cobieCategoryPreview"></span>
                         </div>
                     </div>
                 </section>
@@ -351,6 +358,7 @@
                     </div>
                     <div class="form-actions">
                         <button class="btn-primary" id="applyToSelected">Apply to Selected</button>
+                        <span class="preview-note" id="legacySelectedPreview"></span>
                     </div>
                 </div>
             </section>
@@ -404,6 +412,7 @@
                     </div>
                     <div class="form-actions">
                         <button class="btn-primary" id="applyToCategory">Apply to Category</button>
+                        <span class="preview-note" id="legacyCategoryPreview"></span>
                     </div>
                 </div>
             </section>
@@ -433,6 +442,7 @@
                     </div>
                     <div class="form-actions">
                         <button class="btn-primary" id="updateType">Update Type</button>
+                        <span class="preview-note" id="legacyTypePreview"></span>
                         <span id="typeImpact" class="impact-info"></span>
                     </div>
                 </div>

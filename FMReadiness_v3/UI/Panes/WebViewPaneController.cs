@@ -162,6 +162,7 @@ namespace FMReadiness_v3.UI.Panes
                     overallReadinessPercent = Math.Round(report.AverageReadinessScore * 100, 0),
                     fullyReady = report.FullyReadyAssets,
                     totalAudited = report.TotalAuditedAssets,
+                    auditProfile = report.AuditProfileName,
                     groupScores = report.AverageGroupScores.ToDictionary(
                         kvp => kvp.Key,
                         kvp => (int)Math.Round(kvp.Value * 100))
@@ -180,6 +181,22 @@ namespace FMReadiness_v3.UI.Panes
                     missingCount = result.MissingCount,
                     readinessPercent = (int)Math.Round(result.ReadinessScore * 100),
                     missingParams = result.MissingParams,
+                    missingFields = (result.MissingFields ?? new List<MissingFieldInfo>())
+                        .Select(f => new MissingFieldDto
+                        {
+                            key = f.FieldKey,
+                            label = f.FieldLabel,
+                            group = f.Group,
+                            scope = f.Scope,
+                            required = f.Required,
+                            reason = f.Reason ?? string.Empty
+                        })
+                        .Where(f => !string.IsNullOrWhiteSpace(f.key) || !string.IsNullOrWhiteSpace(f.label))
+                        .GroupBy(f => string.IsNullOrWhiteSpace(f.key)
+                            ? $"{f.label}|{f.reason}"
+                            : $"{f.key}|{f.reason}")
+                        .Select(g => g.First())
+                        .ToList(),
                     groupScores = result.GroupScores.ToDictionary(
                         kvp => kvp.Key,
                         kvp => (int)Math.Round(kvp.Value * 100))
@@ -297,6 +314,8 @@ namespace FMReadiness_v3.UI.Panes
             public int fullyReady { get; set; }
             [DataMember(Name = "totalAudited")]
             public int totalAudited { get; set; }
+            [DataMember(Name = "auditProfile")]
+            public string auditProfile { get; set; } = string.Empty;
             [DataMember(Name = "groupScores")]
             public Dictionary<string, int> groupScores { get; set; } = new();
         }
@@ -318,8 +337,27 @@ namespace FMReadiness_v3.UI.Panes
             public int readinessPercent { get; set; }
             [DataMember(Name = "missingParams")]
             public string missingParams { get; set; } = string.Empty;
+            [DataMember(Name = "missingFields")]
+            public List<MissingFieldDto> missingFields { get; set; } = new();
             [DataMember(Name = "groupScores")]
             public Dictionary<string, int> groupScores { get; set; } = new();
+        }
+
+        [DataContract]
+        private class MissingFieldDto
+        {
+            [DataMember(Name = "key")]
+            public string key { get; set; } = string.Empty;
+            [DataMember(Name = "label")]
+            public string label { get; set; } = string.Empty;
+            [DataMember(Name = "group")]
+            public string group { get; set; } = string.Empty;
+            [DataMember(Name = "scope")]
+            public string scope { get; set; } = string.Empty;
+            [DataMember(Name = "required")]
+            public bool required { get; set; }
+            [DataMember(Name = "reason")]
+            public string reason { get; set; } = string.Empty;
         }
 
         [DataContract]

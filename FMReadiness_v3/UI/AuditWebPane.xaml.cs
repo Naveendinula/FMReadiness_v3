@@ -121,6 +121,14 @@ namespace FMReadiness_v3.UI
                         return;
                     }
 
+                    if (string.Equals(action, "focusFixElement", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.FocusFixElement,
+                            message);
+                        return;
+                    }
+
                     if (string.Equals(action, "setSelectionSyncState", StringComparison.OrdinalIgnoreCase))
                     {
                         var autoSync = root.TryGetProperty("autoSync", out var autoSyncProp) && autoSyncProp.GetBoolean();

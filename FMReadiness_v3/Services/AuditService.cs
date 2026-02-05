@@ -21,6 +21,7 @@ namespace FMReadiness_v3.Services
             public int TotalAuditedAssets { get; set; }
             public int FullyReadyAssets { get; set; }
             public double AverageReadinessScore { get; set; }
+            public string AuditProfileName { get; set; } = string.Empty;
 
             public List<ElementAuditResult> ElementResults { get; set; } = new List<ElementAuditResult>();
 
@@ -69,8 +70,7 @@ namespace FMReadiness_v3.Services
                         var result = TryGetFieldValue(element, typeElement, field, doc);
                         fieldValues[field.Key] = result.ok ? result.value : null;
 
-                        var fieldRules = (field.Rules as IEnumerable<string>) ?? Array.Empty<string>();
-                        if (fieldRules.Contains("unique") && result.ok && !string.IsNullOrWhiteSpace(result.value))
+                        if (HasRule(field, "unique") && result.ok && !string.IsNullOrWhiteSpace(result.value))
                         {
                             if (!uniqueFieldValues.ContainsKey(field.Key))
                                 uniqueFieldValues[field.Key] = new Dictionary<string, List<int>>();
@@ -158,22 +158,34 @@ namespace FMReadiness_v3.Services
                     if (fields.Count == 0)
                         continue;
 
-                    var groupTotal = fields.Count;
+                    var groupTotal = 0;
                     var groupMissing = 0;
 
                     foreach (var field in fields)
                     {
+                        var isRequired = IsFieldRequired(field);
+                        var hasUniqueRule = HasRule(field, "unique");
+                        var isScoredField = isRequired || hasUniqueRule;
+                        if (!isScoredField)
+                            continue;
+
                         string value;
                         fieldValues.TryGetValue(field.Key, out value);
                         var isMissing = string.IsNullOrWhiteSpace(value);
                         var isDuplicate = duplicateFields.Contains(field.Key);
+                        var isFailed = isDuplicate || (isRequired && isMissing);
 
-                        if (isMissing || isDuplicate)
+                        groupTotal++;
+
+                        if (isFailed)
                         {
                             groupMissing++;
                             missingFields.Add(new MissingFieldInfo
                             {
+                                FieldKey = field.Key,
                                 Group = groupName,
+                                Scope = field.Scope ?? string.Empty,
+                                Required = isRequired,
                                 FieldLabel = field.Label,
                                 Reason = isDuplicate ? "duplicate" : null
                             });
@@ -212,22 +224,12 @@ namespace FMReadiness_v3.Services
                 }
 
                 report.TotalAuditedAssets++;
-                var allFields = config.Groups.Values
-                    .SelectMany(g => g?.Fields ?? new List<FieldSpec>())
-                    .Where(f => f != null)
-                    .ToList();
-
                 if (totalMissing > 0)
                 {
                     report.ElementsWithMissingData++;
-                    if (missingFields.Any(f => f.Group == "MakeModel" || (f.Reason == null && config.Groups.ContainsKey("MakeModel"))))
+                    if (missingFields.Any(f => string.Equals(f.Scope, "type", StringComparison.OrdinalIgnoreCase)))
                     {
-                        // Check if any type-scope fields are missing.
-                        if (missingFields.Any(f => allFields
-                                .FirstOrDefault(x => x.Label == f.FieldLabel)?.Scope == "type"))
-                        {
-                            report.ElementsWithMissingTypeData++;
-                        }
+                        report.ElementsWithMissingTypeData++;
                     }
                 }
 
@@ -277,6 +279,31 @@ namespace FMReadiness_v3.Services
             }
 
             return report;
+        }
+
+        private static bool IsFieldRequired(FieldSpec field)
+        {
+            if (field == null)
+                return false;
+
+            if (field.Required.HasValue)
+                return field.Required.Value;
+
+            if (HasRule(field, "optional"))
+                return false;
+
+            if (HasRule(field, "required"))
+                return true;
+
+            return true;
+        }
+
+        private static bool HasRule(FieldSpec field, string rule)
+        {
+            if (field?.Rules == null || string.IsNullOrWhiteSpace(rule))
+                return false;
+
+            return field.Rules.Any(r => string.Equals(r, rule, StringComparison.OrdinalIgnoreCase));
         }
 
         private static string GetCategoryKey(Element element)

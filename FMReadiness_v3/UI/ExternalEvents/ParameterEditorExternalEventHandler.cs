@@ -22,6 +22,7 @@ namespace FMReadiness_v3.UI.ExternalEvents
         public enum OperationType
         {
             GetSelectedElements,
+            FocusFixElement,
             ApplySelectionScope,
             GetCategoryStats,
             SetInstanceParams,
@@ -64,6 +65,9 @@ namespace FMReadiness_v3.UI.ExternalEvents
                 {
                     case OperationType.GetSelectedElements:
                         HandleGetSelectedElements(uidoc, doc);
+                        break;
+                    case OperationType.FocusFixElement:
+                        HandleFocusFixElement(uidoc, doc);
                         break;
                     case OperationType.ApplySelectionScope:
                         HandleApplySelectionScope(uidoc, doc);
@@ -132,23 +136,20 @@ namespace FMReadiness_v3.UI.ExternalEvents
         {
             try
             {
-                // Load checklist config
-                var checklist = new ChecklistService();
-                if (!checklist.LoadConfig())
+                var resolver = new AuditProfileResolverService();
+                if (!resolver.TryResolveRules(out var rules, out var profileName, out var errorMessage))
                 {
-                    SendOperationResult(false, "Could not load checklist configuration");
+                    SendOperationResult(false, errorMessage);
                     return;
                 }
 
-                // Collect elements
                 var collector = new CollectorService(doc);
                 var elements = collector.GetAllFmElements();
 
-                // Run audit
                 var auditService = new AuditService();
-                var report = auditService.RunFullAudit(doc, elements, checklist.Rules);
+                var report = auditService.RunFullAudit(doc, elements, rules);
+                report.AuditProfileName = profileName;
 
-                // Push results to WebView - this will update the audit results tab
                 WebViewPaneController.UpdateFromReport(report);
 
                 SendOperationResult(true, "Audit refreshed", false);
@@ -210,6 +211,7 @@ namespace FMReadiness_v3.UI.ExternalEvents
             {
                 _mappingService = new CobieMappingService(_presetService);
                 var preset = _presetService.CurrentPreset;
+                AuditProfileState.SetActivePreset(_presetService.CurrentPresetName, preset?.Name);
 
                 var result = new
                 {
@@ -241,10 +243,11 @@ namespace FMReadiness_v3.UI.ExternalEvents
         {
             if (_presetService.CurrentPreset == null)
             {
-                // Try to load default preset
                 _presetService.LoadDefaultPreset();
                 _mappingService = new CobieMappingService(_presetService);
             }
+
+            AuditProfileState.SetActivePreset(_presetService.CurrentPresetName, _presetService.CurrentPreset?.Name);
 
             var fieldsByGroup = _presetService.GetFieldsByGroup("Component");
             var typeFields = _presetService.GetFieldsByGroup("Type");
@@ -423,6 +426,8 @@ namespace FMReadiness_v3.UI.ExternalEvents
 
             var elementResults = new List<object>();
             var allFieldValues = new List<(int elementId, Dictionary<string, FieldValueResult> values)>();
+            var cobieReadyCount = 0;
+            var scoreTotal = 0.0;
 
             foreach (var id in selectedIds)
             {
@@ -437,6 +442,10 @@ namespace FMReadiness_v3.UI.ExternalEvents
                 var fieldValues = _mappingService!.GetAllFieldValues(element, typeElement, doc);
                 var validationErrors = _mappingService.ValidateFieldValues(fieldValues);
                 var score = _mappingService.CalculateReadinessScore(fieldValues, validationErrors);
+                var roundedOverallScore = Math.Round(score.OverallScore, 1);
+                if (score.IsCobieReady)
+                    cobieReadyCount++;
+                scoreTotal += roundedOverallScore;
 
                 allFieldValues.Add((GetElementIdValue(id), fieldValues));
 
@@ -445,7 +454,7 @@ namespace FMReadiness_v3.UI.ExternalEvents
                     elementId = GetElementIdValue(id),
                     category = element.Category?.Name ?? "Unknown",
                     cobieReady = score.IsCobieReady,
-                    overallScore = Math.Round(score.OverallScore, 1),
+                    overallScore = roundedOverallScore,
                     requiredScore = Math.Round(score.RequiredFieldsScore, 1),
                     optionalScore = Math.Round(score.OptionalFieldsScore, 1),
                     requiredFields = new
@@ -486,11 +495,9 @@ namespace FMReadiness_v3.UI.ExternalEvents
                 summary = new
                 {
                     totalElements = elementResults.Count,
-                    cobieReadyCount = elementResults.Count(e =>
-                        ((dynamic)e).cobieReady == true),
+                    cobieReadyCount = cobieReadyCount,
                     averageScore = elementResults.Count > 0
-                        ? Math.Round(elementResults.Average(e =>
-                            (double)((dynamic)e).overallScore), 1)
+                        ? Math.Round(scoreTotal / elementResults.Count, 1)
                         : 0
                 }
             };
@@ -541,6 +548,8 @@ namespace FMReadiness_v3.UI.ExternalEvents
                 SendOperationResult(false, "No preset loaded");
                 return;
             }
+
+            AuditProfileState.SetActivePreset(_presetService.CurrentPresetName, preset.Name);
 
             bool includeAliases = true;
             bool replaceCobie = false;
@@ -1005,6 +1014,44 @@ namespace FMReadiness_v3.UI.ExternalEvents
             {
                 PostResult?.Invoke(json);
             }
+        }
+
+        private void HandleFocusFixElement(UIDocument uidoc, Document doc)
+        {
+            if (string.IsNullOrWhiteSpace(JsonPayload))
+            {
+                SendOperationResult(false, "No element specified for fix");
+                return;
+            }
+
+            using var jsonDoc = JsonDocument.Parse(JsonPayload);
+            if (!jsonDoc.RootElement.TryGetProperty("elementId", out var elementIdProp)
+                || !elementIdProp.TryGetInt32(out var elementIdInt))
+            {
+                SendOperationResult(false, "Invalid element id for fix");
+                return;
+            }
+
+            var elementId = new ElementId(elementIdInt);
+            var element = doc.GetElement(elementId);
+            if (element == null)
+            {
+                SendOperationResult(false, $"Element {elementIdInt} not found");
+                return;
+            }
+
+            uidoc.Selection.SetElementIds(new List<ElementId> { elementId });
+
+            try
+            {
+                uidoc.ShowElements(elementId);
+            }
+            catch
+            {
+                // Ignore view-focus failures and still return selected element data.
+            }
+
+            HandleGetSelectedElements(uidoc, doc);
         }
 
         private SelectedElementsSnapshot BuildSelectedElementsSnapshot(UIDocument uidoc, Document doc)
