@@ -71,8 +71,25 @@
             </div>
 
             <!-- Group Score Badges -->
-            <div class="group-scores" id="groupScores">
-                <!-- Populated by JS -->
+            <div class="group-score-sections">
+                <section class="group-score-section" id="componentGroupSection">
+                    <div class="group-section-header">
+                        <span>Component Groups</span>
+                        <span class="group-section-meta" id="componentGroupMeta"></span>
+                    </div>
+                    <div class="group-scores" id="componentGroupScores">
+                        <!-- Populated by JS -->
+                    </div>
+                </section>
+                <section class="group-score-section" id="typeGroupSection">
+                    <div class="group-section-header">
+                        <span>Type Groups</span>
+                        <span class="group-section-meta" id="typeGroupMeta"></span>
+                    </div>
+                    <div class="group-scores" id="typeGroupScores">
+                        <!-- Populated by JS -->
+                    </div>
+                </section>
             </div>
             <div class="category-scores" id="categoryScores">
                 <!-- Populated by JS -->
@@ -98,6 +115,14 @@
                         <option value="required">Required + unique only</option>
                     </select>
                 </label>
+                <label class="audit-mode-label">
+                    <span>Audit view</span>
+                    <select id="auditViewMode" class="audit-mode-select">
+                        <option value="combined" selected>Combined</option>
+                        <option value="component">Component only</option>
+                        <option value="type">Type only</option>
+                    </select>
+                </label>
             </div>
 
             <!-- Results Table -->
@@ -112,8 +137,8 @@
                                 <th>Family</th>
                                 <th>Type</th>
                                 <th>Readiness</th>
-                                <th>Groups</th>
-                                <th>Missing</th>
+                                <th id="groupsHeader">Groups</th>
+                                <th id="missingHeader">Missing</th>
                                 <th>View</th>
                                 <th>Actions</th>
                             </tr>

@@ -31,12 +31,20 @@ const missingCountEl = document.getElementById('missingCount');
 const missingSublabelEl = document.getElementById('missingSublabel');
 const totalCountEl = document.getElementById('totalCount');
 const auditProfileLabelEl = document.getElementById('auditProfileLabel');
-const groupScoresEl = document.getElementById('groupScores');
+const componentGroupSectionEl = document.getElementById('componentGroupSection');
+const typeGroupSectionEl = document.getElementById('typeGroupSection');
+const componentGroupScoresEl = document.getElementById('componentGroupScores');
+const typeGroupScoresEl = document.getElementById('typeGroupScores');
+const componentGroupMetaEl = document.getElementById('componentGroupMeta');
+const typeGroupMetaEl = document.getElementById('typeGroupMeta');
 const categoryScoresEl = document.getElementById('categoryScores');
 const searchInput = document.getElementById('searchInput');
 const showMissingOnly = document.getElementById('showMissingOnly');
 const auditScoreModeEl = document.getElementById('auditScoreMode');
+const auditViewModeEl = document.getElementById('auditViewMode');
 const categoryFilterEl = document.getElementById('categoryFilter');
+const groupsHeaderEl = document.getElementById('groupsHeader');
+const missingHeaderEl = document.getElementById('missingHeader');
 const tableBody = document.getElementById('tableBody');
 const resultsTable = document.getElementById('resultsTable');
 const emptyState = document.getElementById('emptyState');
@@ -151,8 +159,11 @@ function receiveAudit(data) {
  * Main render function
  */
 function render() {
-    const { summary, rows } = window.auditData;
+    const { summary, rows: rawRows } = window.auditData;
     const baseSummary = summary || { auditProfile: '', scoreModeLabel: '', scoreMode: '' };
+    const viewMode = auditViewModeEl?.value || 'combined';
+    const rows = projectAuditRowsByView(rawRows || [], viewMode);
+    updateAuditTableHeaders(viewMode);
 
     updateCategoryFilterOptions(rows);
     const scopeCategory = categoryFilterEl?.value || 'all';
@@ -185,6 +196,27 @@ function render() {
                 : 'Audit profile: --';
         }
 
+        const viewLabel = viewMode === 'combined'
+            ? 'Combined'
+            : viewMode === 'component'
+                ? 'Component only'
+                : 'Type only';
+        if (auditProfileLabelEl && summaryToRender.auditProfile) {
+            const modeLabel = summary.scoreModeLabel ? ` • ${summary.scoreModeLabel}` : '';
+            auditProfileLabelEl.textContent = `Audit profile: ${summaryToRender.auditProfile}${modeLabel} • View: ${viewLabel}${scopeCategory !== 'all' ? ` • Category: ${scopeCategory}` : ''}`;
+        }
+
+        if (auditProfileLabelEl && summaryToRender.auditProfile) {
+            const viewLabel = viewMode === 'combined'
+                ? 'Combined'
+                : viewMode === 'component'
+                    ? 'Component only'
+                    : 'Type only';
+            const modeLabel = summaryToRender.scoreModeLabel ? ` | ${summaryToRender.scoreModeLabel}` : '';
+            const categoryLabel = scopeCategory !== 'all' ? ` | Category: ${scopeCategory}` : '';
+            auditProfileLabelEl.textContent = `Audit profile: ${summaryToRender.auditProfile}${modeLabel} | View: ${viewLabel}${categoryLabel}`;
+        }
+
         // Render group score badges
         renderGroupScores(summaryToRender.groupScores || {});
         renderCategoryScores(rows);
@@ -203,7 +235,7 @@ function render() {
         if (auditProfileLabelEl) {
             auditProfileLabelEl.textContent = 'Audit profile: --';
         }
-        groupScoresEl.innerHTML = '';
+        renderGroupScoreSections({}, viewMode);
         if (categoryScoresEl) {
             categoryScoresEl.innerHTML = '';
         }
@@ -247,7 +279,7 @@ function filterRows(rows) {
                 row.category,
                 row.family,
                 row.type,
-                row.missingParams,
+                row.missingParamsDisplay || row.missingParams,
                 String(row.elementId)
             ].map(f => (f || '').toLowerCase());
 
@@ -263,21 +295,131 @@ function filterRows(rows) {
  * Render group score badges in the summary area
  */
 function renderGroupScores(groupScores) {
-    if (!groupScoresEl) return;
+    const viewMode = auditViewModeEl?.value || 'combined';
+    renderGroupScoreSections(groupScores, viewMode);
+}
 
+function isTypeGroupName(name) {
+    return String(name || '').trim().toLowerCase().startsWith('type:');
+}
+
+function splitGroupScoresByScope(groupScores) {
+    const component = {};
+    const type = {};
+    Object.entries(groupScores || {}).forEach(([name, pct]) => {
+        if (isTypeGroupName(name)) {
+            type[name] = pct;
+        } else {
+            component[name] = pct;
+        }
+    });
+    return { component, type };
+}
+
+function getMissingEntryScope(entry) {
+    const scope = String(entry?.scope || '').trim().toLowerCase();
+    if (scope === 'type') return 'type';
+    if (scope === 'component' || scope === 'instance') return 'component';
+
+    const group = String(entry?.group || '').trim();
+    if (isTypeGroupName(group)) return 'type';
+    if (group) return 'component';
+
+    const key = String(entry?.key || '').trim().toLowerCase();
+    if (key.startsWith('type.') || key.includes('.type.') || key.startsWith('cobie.type.')) return 'type';
+
+    return 'component';
+}
+
+function summarizeMissingEntries(entries, fallbackText) {
+    const labels = (entries || [])
+        .map(entry => (entry.label || entry.key || '').trim())
+        .filter(Boolean);
+    const uniqueLabels = [...new Set(labels)];
+    if (uniqueLabels.length === 0) return fallbackText || '-';
+
+    const head = uniqueLabels.slice(0, 3).join(', ');
+    const remaining = uniqueLabels.length - 3;
+    return remaining > 0 ? `${head} +${remaining} more` : head;
+}
+
+function renderGroupBadgeList(containerEl, groupScores) {
+    if (!containerEl) return;
     const groups = Object.entries(groupScores || {});
     if (groups.length === 0) {
-        groupScoresEl.innerHTML = '';
+        containerEl.innerHTML = '';
         return;
     }
 
-    groupScoresEl.innerHTML = groups.map(([name, pct]) => {
+    containerEl.innerHTML = groups
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([name, pct]) => {
         const scoreClass = getScoreClass(pct);
         return `<div class="group-badge ${scoreClass}">
             <span class="group-name">${escapeHtml(name)}</span>
             <span class="group-pct">${pct}%</span>
         </div>`;
     }).join('');
+}
+
+function renderGroupScoreSections(groupScores, viewMode) {
+    const { component, type } = splitGroupScoresByScope(groupScores);
+    const hasComponent = Object.keys(component).length > 0;
+    const hasType = Object.keys(type).length > 0;
+
+    if (componentGroupSectionEl) {
+        componentGroupSectionEl.classList.toggle('hidden', viewMode === 'type' || !hasComponent);
+    }
+    if (typeGroupSectionEl) {
+        typeGroupSectionEl.classList.toggle('hidden', viewMode === 'component' || !hasType);
+    }
+
+    if (componentGroupMetaEl) componentGroupMetaEl.textContent = hasComponent ? `${Object.keys(component).length} groups` : '';
+    if (typeGroupMetaEl) typeGroupMetaEl.textContent = hasType ? `${Object.keys(type).length} groups` : '';
+
+    renderGroupBadgeList(componentGroupScoresEl, component);
+    renderGroupBadgeList(typeGroupScoresEl, type);
+}
+
+function projectAuditRowsByView(rows, viewMode) {
+    return (rows || [])
+        .map(row => {
+            const { component, type } = splitGroupScoresByScope(row.groupScores || {});
+            const scopedScores = viewMode === 'type'
+                ? type
+                : viewMode === 'component'
+                    ? component
+                    : (row.groupScores || {});
+
+            const allEntries = normalizeMissingFieldEntries(row.missingFields, row.missingParams);
+            const scopedEntries = viewMode === 'combined'
+                ? allEntries
+                : allEntries.filter(entry => getMissingEntryScope(entry) === viewMode);
+
+            const scopedScoreValues = Object.values(scopedScores)
+                .map(value => Number(value))
+                .filter(Number.isFinite);
+            const projectedReadiness = viewMode === 'combined'
+                ? (Number(row.readinessPercent) || 0)
+                : (scopedScoreValues.length > 0
+                    ? Math.round(scopedScoreValues.reduce((sum, value) => sum + value, 0) / scopedScoreValues.length)
+                    : 0);
+
+            const hasScopedData = viewMode === 'combined'
+                ? true
+                : scopedScoreValues.length > 0 || scopedEntries.length > 0;
+
+            return {
+                ...row,
+                groupScores: scopedScores,
+                missingFields: scopedEntries,
+                missingCount: scopedEntries.length,
+                missingParamsDisplay: summarizeMissingEntries(scopedEntries, row.missingParams),
+                readinessPercent: projectedReadiness,
+                _hasScopedData: hasScopedData
+            };
+        })
+        .filter(row => row._hasScopedData);
 }
 
 function computeGroupScores(rows) {
@@ -389,12 +531,23 @@ function renderRowGroupBadges(groupScores) {
         return '-';
     }
 
-    return Object.entries(groupScores).map(([name, pct]) => {
+    const sorted = Object.entries(groupScores)
+        .sort((a, b) => Number(a[1]) - Number(b[1]));
+    const maxBadges = 4;
+    const visible = sorted.slice(0, maxBadges);
+    const remaining = sorted.length - visible.length;
+
+    const badgeHtml = visible.map(([name, pct]) => {
         const scoreClass = getScoreClass(pct);
-        // Abbreviate group names for inline display
-        const abbrev = name.substring(0, 3);
+        const abbrev = name.startsWith('Type:')
+            ? `T:${name.replace(/^Type:\s*/i, '').substring(0, 3)}`
+            : name.substring(0, 3);
         return `<span class="group-badge-sm ${scoreClass}" title="${escapeHtml(name)}: ${pct}%">${abbrev} ${pct}%</span>`;
     }).join(' ');
+
+    return remaining > 0
+        ? `${badgeHtml} <span class="group-badge-sm more-badge" title="${remaining} additional groups">+${remaining}</span>`
+        : badgeHtml;
 }
 
 /**
@@ -426,7 +579,7 @@ function renderTable(rows) {
             <td>${escapeHtml(row.type)}</td>
             <td class="${readinessClass}">${row.readinessPercent}%</td>
             <td class="group-badges-inline">${groupBadgesHtml}</td>
-            <td class="missing-params" title="${escapeHtml(row.missingParams)}">${escapeHtml(row.missingParams) || '-'}</td>
+            <td class="missing-params" title="${escapeHtml(row.missingParamsDisplay || row.missingParams)}">${escapeHtml(row.missingParamsDisplay || row.missingParams) || '-'}</td>
             <td>
                 <select class="view-select" data-element-id="${row.elementId}" disabled>
                     <option>Select view</option>
@@ -612,6 +765,24 @@ function open2dView(elementId, viewId) {
             elementId: elementId,
             viewId: viewId
         });
+    }
+}
+
+function updateAuditTableHeaders(viewMode) {
+    if (groupsHeaderEl) {
+        groupsHeaderEl.textContent = viewMode === 'combined'
+            ? 'Groups'
+            : viewMode === 'component'
+                ? 'Component Groups'
+                : 'Type Groups';
+    }
+
+    if (missingHeaderEl) {
+        missingHeaderEl.textContent = viewMode === 'combined'
+            ? 'Missing'
+            : viewMode === 'component'
+                ? 'Missing (Component)'
+                : 'Missing (Type)';
     }
 }
 
@@ -841,6 +1012,10 @@ showMissingOnly.addEventListener('change', () => {
 });
 
 categoryFilterEl?.addEventListener('change', () => {
+    render();
+});
+
+auditViewModeEl?.addEventListener('change', () => {
     render();
 });
 
