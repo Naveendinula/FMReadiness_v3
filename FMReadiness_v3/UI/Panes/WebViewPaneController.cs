@@ -167,7 +167,21 @@ namespace FMReadiness_v3.UI.Panes
                     scoreModeLabel = AuditProfileState.GetScoreModeLabel(report.ScoreMode),
                     groupScores = report.AverageGroupScores.ToDictionary(
                         kvp => kvp.Key,
-                        kvp => (int)Math.Round(kvp.Value * 100))
+                        kvp => (int)Math.Round(kvp.Value * 100)),
+                    groupStats = report.AggregateGroupStats.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => new GroupStatsDto
+                        {
+                            totalChecks = kvp.Value.TotalChecks,
+                            failedChecks = kvp.Value.FailedChecks
+                        }),
+                    groupDefinitions = report.GroupDefinitions.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => new GroupDefinitionDto
+                        {
+                            scope = kvp.Value.Scope ?? string.Empty,
+                            fields = kvp.Value.FieldLabels?.ToList() ?? new List<string>()
+                        })
                 },
                 rows = new List<RowDto>()
             };
@@ -201,7 +215,14 @@ namespace FMReadiness_v3.UI.Panes
                         .ToList(),
                     groupScores = result.GroupScores.ToDictionary(
                         kvp => kvp.Key,
-                        kvp => (int)Math.Round(kvp.Value * 100))
+                        kvp => (int)Math.Round(kvp.Value * 100)),
+                    groupStats = result.GroupStats.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => new GroupStatsDto
+                        {
+                            totalChecks = kvp.Value.TotalChecks,
+                            failedChecks = kvp.Value.FailedChecks
+                        })
                 });
             }
 
@@ -324,6 +345,10 @@ namespace FMReadiness_v3.UI.Panes
             public string scoreModeLabel { get; set; } = string.Empty;
             [DataMember(Name = "groupScores")]
             public Dictionary<string, int> groupScores { get; set; } = new();
+            [DataMember(Name = "groupStats")]
+            public Dictionary<string, GroupStatsDto> groupStats { get; set; } = new();
+            [DataMember(Name = "groupDefinitions")]
+            public Dictionary<string, GroupDefinitionDto> groupDefinitions { get; set; } = new();
         }
 
         [DataContract]
@@ -347,6 +372,8 @@ namespace FMReadiness_v3.UI.Panes
             public List<MissingFieldDto> missingFields { get; set; } = new();
             [DataMember(Name = "groupScores")]
             public Dictionary<string, int> groupScores { get; set; } = new();
+            [DataMember(Name = "groupStats")]
+            public Dictionary<string, GroupStatsDto> groupStats { get; set; } = new();
         }
 
         [DataContract]
@@ -364,6 +391,24 @@ namespace FMReadiness_v3.UI.Panes
             public bool required { get; set; }
             [DataMember(Name = "reason")]
             public string reason { get; set; } = string.Empty;
+        }
+
+        [DataContract]
+        private class GroupStatsDto
+        {
+            [DataMember(Name = "totalChecks")]
+            public int totalChecks { get; set; }
+            [DataMember(Name = "failedChecks")]
+            public int failedChecks { get; set; }
+        }
+
+        [DataContract]
+        private class GroupDefinitionDto
+        {
+            [DataMember(Name = "scope")]
+            public string scope { get; set; } = string.Empty;
+            [DataMember(Name = "fields")]
+            public List<string> fields { get; set; } = new();
         }
 
         [DataContract]

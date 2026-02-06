@@ -27,6 +27,8 @@ namespace FMReadiness_v3.Services
             public List<ElementAuditResult> ElementResults { get; set; } = new List<ElementAuditResult>();
 
             public Dictionary<string, double> AverageGroupScores { get; set; } = new Dictionary<string, double>();
+            public Dictionary<string, GroupAuditStats> AggregateGroupStats { get; set; } = new Dictionary<string, GroupAuditStats>();
+            public Dictionary<string, GroupDefinitionInfo> GroupDefinitions { get; set; } = new Dictionary<string, GroupDefinitionInfo>();
 
             public Dictionary<string, List<int>> UniquenessViolations { get; set; } = new Dictionary<string, List<int>>();
         }
@@ -42,6 +44,7 @@ namespace FMReadiness_v3.Services
                 return report;
             var elementList = elements.ToList();
             report.ScoreMode = scoreMode;
+            report.GroupDefinitions = BuildGroupDefinitions(rules);
 
             // Phase 1: collect all field values for uniqueness checks.
             var fieldValuesMap = new Dictionary<int, Dictionary<string, string>>();
@@ -121,8 +124,6 @@ namespace FMReadiness_v3.Services
             // Phase 3: score each element.
             var scoreSum = 0.0;
             var scoredAssets = 0;
-            var groupScoreSums = new Dictionary<string, double>();
-            var groupScoreCounts = new Dictionary<string, int>();
 
             foreach (var element in elementList)
             {
@@ -150,6 +151,7 @@ namespace FMReadiness_v3.Services
 
                 var missingFields = new List<MissingFieldInfo>();
                 var groupScores = new Dictionary<string, double>();
+                var groupStats = new Dictionary<string, GroupAuditStats>();
                 var totalScored = 0;
                 var totalMissing = 0;
                 var scoreAllFields = scoreMode == AuditScoreMode.AllEditable;
@@ -214,18 +216,28 @@ namespace FMReadiness_v3.Services
                         }
                     }
 
+                    if (groupTotal <= 0)
+                        continue;
+
                     var groupScore = groupTotal > 0 ? 1.0 - ((double)groupMissing / groupTotal) : 1.0;
                     groupScore = Clamp01(groupScore);
                     groupScores[groupName] = groupScore;
 
-                    if (!groupScoreSums.ContainsKey(groupName))
+                    var stats = new GroupAuditStats
                     {
-                        groupScoreSums[groupName] = 0;
-                        groupScoreCounts[groupName] = 0;
-                    }
+                        TotalChecks = groupTotal,
+                        FailedChecks = groupMissing
+                    };
+                    groupStats[groupName] = stats;
 
-                    groupScoreSums[groupName] += groupScore;
-                    groupScoreCounts[groupName]++;
+                    GroupAuditStats aggregateStats;
+                    if (!report.AggregateGroupStats.TryGetValue(groupName, out aggregateStats))
+                    {
+                        aggregateStats = new GroupAuditStats();
+                        report.AggregateGroupStats[groupName] = aggregateStats;
+                    }
+                    aggregateStats.TotalChecks += stats.TotalChecks;
+                    aggregateStats.FailedChecks += stats.FailedChecks;
 
                     totalScored += groupTotal;
                     totalMissing += groupMissing;
@@ -272,21 +284,67 @@ namespace FMReadiness_v3.Services
                     ReadinessScore = overallScore,
                     MissingParams = missingParamsStr,
                     GroupScores = groupScores,
+                    GroupStats = groupStats,
                     MissingFields = missingFields
                 });
             }
 
             report.AverageReadinessScore = scoredAssets == 0 ? 1.0 : (scoreSum / scoredAssets);
 
-            foreach (var groupEntry in groupScoreSums)
+            foreach (var groupEntry in report.AggregateGroupStats)
             {
                 var groupName = groupEntry.Key;
-                var sum = groupEntry.Value;
-                var count = groupScoreCounts[groupName];
-                report.AverageGroupScores[groupName] = count > 0 ? sum / count : 1.0;
+                var stats = groupEntry.Value;
+                if (stats.TotalChecks <= 0)
+                    continue;
+                report.AverageGroupScores[groupName] = Clamp01((double)stats.PassedChecks / stats.TotalChecks);
             }
 
             return report;
+        }
+
+        private static Dictionary<string, GroupDefinitionInfo> BuildGroupDefinitions(Dictionary<string, CategoryConfig> rules)
+        {
+            var definitions = new Dictionary<string, GroupDefinitionInfo>();
+
+            foreach (var categoryEntry in rules)
+            {
+                var groups = categoryEntry.Value?.Groups;
+                if (groups == null) continue;
+
+                foreach (var groupEntry in groups)
+                {
+                    var groupName = groupEntry.Key ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(groupName)) continue;
+
+                    GroupDefinitionInfo definition;
+                    if (!definitions.TryGetValue(groupName, out definition))
+                    {
+                        definition = new GroupDefinitionInfo
+                        {
+                            GroupName = groupName,
+                            Scope = groupName.StartsWith("Type:", StringComparison.OrdinalIgnoreCase) ? "type" : "component",
+                            FieldLabels = new List<string>()
+                        };
+                        definitions[groupName] = definition;
+                    }
+
+                    var fields = groupEntry.Value?.Fields;
+                    if (fields == null) continue;
+
+                    foreach (var field in fields)
+                    {
+                        if (field == null) continue;
+                        var label = !string.IsNullOrWhiteSpace(field.Label) ? field.Label : field.Key;
+                        if (string.IsNullOrWhiteSpace(label)) continue;
+
+                        if (!definition.FieldLabels.Any(existing => string.Equals(existing, label, StringComparison.OrdinalIgnoreCase)))
+                            definition.FieldLabels.Add(label);
+                    }
+                }
+            }
+
+            return definitions;
         }
 
         private static bool IsFieldRequired(FieldSpec field)

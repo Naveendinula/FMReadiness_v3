@@ -14,9 +14,24 @@ namespace FMReadiness_v3.Services
 
         // Group-level scores (group name -> score 0..1)
         public Dictionary<string, double> GroupScores { get; set; } = new();
+        public Dictionary<string, GroupAuditStats> GroupStats { get; set; } = new();
 
         // Missing fields annotated with group: "[Identity] Asset Tag, [Location] Room"
         public List<MissingFieldInfo> MissingFields { get; set; } = new();
+    }
+
+    public class GroupAuditStats
+    {
+        public int TotalChecks { get; set; }
+        public int FailedChecks { get; set; }
+        public int PassedChecks => TotalChecks - FailedChecks;
+    }
+
+    public class GroupDefinitionInfo
+    {
+        public string GroupName { get; set; } = string.Empty;
+        public string Scope { get; set; } = string.Empty;
+        public List<string> FieldLabels { get; set; } = new();
     }
 
     public class MissingFieldInfo

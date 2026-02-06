@@ -37,6 +37,7 @@ const componentGroupScoresEl = document.getElementById('componentGroupScores');
 const typeGroupScoresEl = document.getElementById('typeGroupScores');
 const componentGroupMetaEl = document.getElementById('componentGroupMeta');
 const typeGroupMetaEl = document.getElementById('typeGroupMeta');
+const groupScoreHelpEl = document.getElementById('groupScoreHelp');
 const categoryScoresEl = document.getElementById('categoryScores');
 const searchInput = document.getElementById('searchInput');
 const showMissingOnly = document.getElementById('showMissingOnly');
@@ -91,6 +92,20 @@ const legacyFixKeyMap = {
     type_Manufacturer: ['Manufacturer', 'Type.Manufacturer'],
     type_Model: ['Model', 'Type.ModelNumber'],
     type_TypeMark: ['TypeMark', 'Type.TypeMark']
+};
+
+const groupExplanationMap = {
+    identity: 'Identity fields identify each asset or type for tracking and handover.',
+    metadata: 'Metadata fields capture authoring and timestamp context.',
+    installwarranty: 'Install and warranty fields support warranty and commissioning workflows.',
+    location: 'Location fields tie assets to rooms/spaces/levels.',
+    fmops: 'FM operations fields support maintenance planning and operations.',
+    classification: 'Classification fields map assets to agreed classification systems.',
+    makemodel: 'Make/model fields capture manufacturer and model references.',
+    warranty: 'Type warranty fields define coverage terms and units.',
+    lifecycle: 'Lifecycle fields support replacement planning and service life.',
+    dimensions: 'Dimension fields capture physical size information.',
+    reference: 'Reference fields link to external documents or model references.'
 };
 
 // Initialize WebView2 message listener
@@ -160,7 +175,14 @@ function receiveAudit(data) {
  */
 function render() {
     const { summary, rows: rawRows } = window.auditData;
-    const baseSummary = summary || { auditProfile: '', scoreModeLabel: '', scoreMode: '' };
+    const baseSummary = summary || {
+        auditProfile: '',
+        scoreModeLabel: '',
+        scoreMode: '',
+        groupScores: {},
+        groupStats: {},
+        groupDefinitions: {}
+    };
     const viewMode = auditViewModeEl?.value || 'combined';
     const rows = projectAuditRowsByView(rawRows || [], viewMode);
     updateAuditTableHeaders(viewMode);
@@ -218,7 +240,12 @@ function render() {
         }
 
         // Render group score badges
-        renderGroupScores(summaryToRender.groupScores || {});
+        renderGroupScores(
+            summaryToRender.groupScores || {},
+            summaryToRender.groupStats || {},
+            summaryToRender.groupDefinitions || {},
+            summaryToRender.scoreModeLabel || ''
+        );
         renderCategoryScores(rows);
 
         if (auditScoreModeEl && summaryToRender.scoreMode) {
@@ -235,7 +262,7 @@ function render() {
         if (auditProfileLabelEl) {
             auditProfileLabelEl.textContent = 'Audit profile: --';
         }
-        renderGroupScoreSections({}, viewMode);
+        renderGroupScoreSections({}, {}, {}, viewMode, '');
         if (categoryScoresEl) {
             categoryScoresEl.innerHTML = '';
         }
@@ -294,26 +321,104 @@ function filterRows(rows) {
 /**
  * Render group score badges in the summary area
  */
-function renderGroupScores(groupScores) {
+function renderGroupScores(groupScores, groupStats, groupDefinitions, scoreModeLabel) {
     const viewMode = auditViewModeEl?.value || 'combined';
-    renderGroupScoreSections(groupScores, viewMode);
+    renderGroupScoreSections(groupScores, groupStats, groupDefinitions, viewMode, scoreModeLabel);
 }
 
 function isTypeGroupName(name) {
     return String(name || '').trim().toLowerCase().startsWith('type:');
 }
 
-function splitGroupScoresByScope(groupScores) {
+function splitGroupMapByScope(groupMap) {
     const component = {};
     const type = {};
-    Object.entries(groupScores || {}).forEach(([name, pct]) => {
+    Object.entries(groupMap || {}).forEach(([name, value]) => {
         if (isTypeGroupName(name)) {
-            type[name] = pct;
+            type[name] = value;
         } else {
-            component[name] = pct;
+            component[name] = value;
         }
     });
     return { component, type };
+}
+
+function splitGroupScoresByScope(groupScores) {
+    return splitGroupMapByScope(groupScores);
+}
+
+function normalizeGroupStatsMap(groupStats) {
+    const normalized = {};
+    Object.entries(groupStats || {}).forEach(([groupName, stats]) => {
+        const totalChecks = Number(stats?.totalChecks ?? stats?.total ?? 0);
+        const failedChecks = Number(stats?.failedChecks ?? stats?.failed ?? 0);
+        if (!Number.isFinite(totalChecks) || totalChecks <= 0) return;
+
+        const safeTotal = Math.max(0, Math.round(totalChecks));
+        const safeFailed = Math.max(0, Math.min(safeTotal, Math.round(Number.isFinite(failedChecks) ? failedChecks : 0)));
+        normalized[groupName] = {
+            totalChecks: safeTotal,
+            failedChecks: safeFailed,
+            passedChecks: Math.max(0, safeTotal - safeFailed)
+        };
+    });
+    return normalized;
+}
+
+function sumGroupStats(groupStats) {
+    return Object.values(groupStats || {}).reduce((acc, stats) => {
+        const totalChecks = Number(stats?.totalChecks) || 0;
+        const failedChecks = Number(stats?.failedChecks) || 0;
+        acc.totalChecks += totalChecks;
+        acc.failedChecks += failedChecks;
+        return acc;
+    }, { totalChecks: 0, failedChecks: 0 });
+}
+
+function getGroupDefinition(groupDefinitions, groupName) {
+    if (!groupDefinitions || !groupName) return null;
+    return groupDefinitions[groupName] || groupDefinitions[String(groupName).trim()] || null;
+}
+
+function getGroupScopeLabel(groupName, definition) {
+    const scope = String(definition?.scope || '').trim().toLowerCase();
+    if (scope === 'type') return 'Type';
+    if (scope === 'component' || scope === 'instance') return 'Component';
+    return isTypeGroupName(groupName) ? 'Type' : 'Component';
+}
+
+function getGroupExplanation(groupName) {
+    const key = String(groupName || '').replace(/^Type:\s*/i, '').trim().toLowerCase();
+    return groupExplanationMap[key] || 'Audit group from the active preset.';
+}
+
+function getGroupFieldSummary(definition) {
+    const fields = Array.isArray(definition?.fields)
+        ? definition.fields.filter(Boolean)
+        : [];
+    if (fields.length === 0) return 'Defined by active preset.';
+    if (fields.length <= 5) return fields.join(', ');
+    return `${fields.slice(0, 5).join(', ')} +${fields.length - 5} more`;
+}
+
+function buildGroupTooltip(groupName, percent, stats, definition, scoreModeLabel) {
+    const totalChecks = Number(stats?.totalChecks) || 0;
+    const failedChecks = Number(stats?.failedChecks) || 0;
+    const passedChecks = Math.max(0, totalChecks - failedChecks);
+    const scopeLabel = getGroupScopeLabel(groupName, definition);
+    const scoringLabel = scoreModeLabel
+        ? `Scoring mode: ${scoreModeLabel}.`
+        : 'Scoring mode: current audit scope.';
+
+    return [
+        `${groupName}`,
+        `Scope: ${scopeLabel}`,
+        `Score: ${Math.round(Number(percent) || 0)}%`,
+        totalChecks > 0 ? `Checks passed: ${passedChecks}/${totalChecks}` : 'Checks passed: --',
+        `Fields: ${getGroupFieldSummary(definition)}`,
+        scoringLabel,
+        getGroupExplanation(groupName)
+    ].join('\n');
 }
 
 function getMissingEntryScope(entry) {
@@ -343,7 +448,7 @@ function summarizeMissingEntries(entries, fallbackText) {
     return remaining > 0 ? `${head} +${remaining} more` : head;
 }
 
-function renderGroupBadgeList(containerEl, groupScores) {
+function renderGroupBadgeList(containerEl, groupScores, groupStats, groupDefinitions, scoreModeLabel) {
     if (!containerEl) return;
     const groups = Object.entries(groupScores || {});
     if (groups.length === 0) {
@@ -355,15 +460,26 @@ function renderGroupBadgeList(containerEl, groupScores) {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([name, pct]) => {
         const scoreClass = getScoreClass(pct);
+        const stats = groupStats?.[name] || null;
+        const totalChecks = Number(stats?.totalChecks) || 0;
+        const failedChecks = Number(stats?.failedChecks) || 0;
+        const passedChecks = Math.max(0, totalChecks - failedChecks);
+        const countLabel = totalChecks > 0 ? `${passedChecks}/${totalChecks}` : '--';
+        const definition = getGroupDefinition(groupDefinitions, name);
+        const tooltip = buildGroupTooltip(name, pct, stats, definition, scoreModeLabel);
         return `<div class="group-badge ${scoreClass}">
             <span class="group-name">${escapeHtml(name)}</span>
             <span class="group-pct">${pct}%</span>
+            <span class="group-count" title="${escapeHtml(tooltip)}">${countLabel}</span>
+            <span class="group-info" title="${escapeHtml(tooltip)}" aria-label="Group details">i</span>
         </div>`;
     }).join('');
 }
 
-function renderGroupScoreSections(groupScores, viewMode) {
+function renderGroupScoreSections(groupScores, groupStats, groupDefinitions, viewMode, scoreModeLabel) {
     const { component, type } = splitGroupScoresByScope(groupScores);
+    const { component: componentStats, type: typeStats } = splitGroupMapByScope(normalizeGroupStatsMap(groupStats));
+    const { component: componentDefs, type: typeDefs } = splitGroupMapByScope(groupDefinitions || {});
     const hasComponent = Object.keys(component).length > 0;
     const hasType = Object.keys(type).length > 0;
 
@@ -374,44 +490,72 @@ function renderGroupScoreSections(groupScores, viewMode) {
         typeGroupSectionEl.classList.toggle('hidden', viewMode === 'component' || !hasType);
     }
 
-    if (componentGroupMetaEl) componentGroupMetaEl.textContent = hasComponent ? `${Object.keys(component).length} groups` : '';
-    if (typeGroupMetaEl) typeGroupMetaEl.textContent = hasType ? `${Object.keys(type).length} groups` : '';
+    const componentTotals = sumGroupStats(componentStats);
+    const typeTotals = sumGroupStats(typeStats);
+    if (componentGroupMetaEl) {
+        componentGroupMetaEl.textContent = hasComponent
+            ? `${Object.keys(component).length} groups${componentTotals.totalChecks > 0 ? ` | ${Math.max(0, componentTotals.totalChecks - componentTotals.failedChecks)}/${componentTotals.totalChecks}` : ''}`
+            : '';
+    }
+    if (typeGroupMetaEl) {
+        typeGroupMetaEl.textContent = hasType
+            ? `${Object.keys(type).length} groups${typeTotals.totalChecks > 0 ? ` | ${Math.max(0, typeTotals.totalChecks - typeTotals.failedChecks)}/${typeTotals.totalChecks}` : ''}`
+            : '';
+    }
 
-    renderGroupBadgeList(componentGroupScoresEl, component);
-    renderGroupBadgeList(typeGroupScoresEl, type);
+    if (groupScoreHelpEl) {
+        const modeLabel = scoreModeLabel ? ` Current scoring mode: ${scoreModeLabel}.` : '';
+        groupScoreHelpEl.textContent = `Hover badges for scope, included fields, and scoring details.${modeLabel}`;
+    }
+
+    renderGroupBadgeList(componentGroupScoresEl, component, componentStats, componentDefs, scoreModeLabel);
+    renderGroupBadgeList(typeGroupScoresEl, type, typeStats, typeDefs, scoreModeLabel);
 }
 
 function projectAuditRowsByView(rows, viewMode) {
     return (rows || [])
         .map(row => {
             const { component, type } = splitGroupScoresByScope(row.groupScores || {});
+            const { component: componentStats, type: typeStats } = splitGroupMapByScope(normalizeGroupStatsMap(row.groupStats || {}));
             const scopedScores = viewMode === 'type'
                 ? type
                 : viewMode === 'component'
                     ? component
                     : (row.groupScores || {});
+            const scopedStats = viewMode === 'type'
+                ? typeStats
+                : viewMode === 'component'
+                    ? componentStats
+                    : normalizeGroupStatsMap(row.groupStats || {});
 
             const allEntries = normalizeMissingFieldEntries(row.missingFields, row.missingParams);
             const scopedEntries = viewMode === 'combined'
                 ? allEntries
                 : allEntries.filter(entry => getMissingEntryScope(entry) === viewMode);
 
+            const scopedTotals = sumGroupStats(scopedStats);
             const scopedScoreValues = Object.values(scopedScores)
                 .map(value => Number(value))
                 .filter(Number.isFinite);
-            const projectedReadiness = viewMode === 'combined'
-                ? (Number(row.readinessPercent) || 0)
-                : (scopedScoreValues.length > 0
-                    ? Math.round(scopedScoreValues.reduce((sum, value) => sum + value, 0) / scopedScoreValues.length)
-                    : 0);
+            const projectedReadinessFromStats = scopedTotals.totalChecks > 0
+                ? Math.round(((scopedTotals.totalChecks - scopedTotals.failedChecks) / scopedTotals.totalChecks) * 100)
+                : null;
+            const projectedReadiness = projectedReadinessFromStats != null
+                ? projectedReadinessFromStats
+                : (viewMode === 'combined'
+                    ? (Number(row.readinessPercent) || 0)
+                    : (scopedScoreValues.length > 0
+                        ? Math.round(scopedScoreValues.reduce((sum, value) => sum + value, 0) / scopedScoreValues.length)
+                        : 0));
 
             const hasScopedData = viewMode === 'combined'
                 ? true
-                : scopedScoreValues.length > 0 || scopedEntries.length > 0;
+                : Object.keys(scopedScores).length > 0 || Object.keys(scopedStats).length > 0 || scopedEntries.length > 0;
 
             return {
                 ...row,
                 groupScores: scopedScores,
+                groupStats: scopedStats,
                 missingFields: scopedEntries,
                 missingCount: scopedEntries.length,
                 missingParamsDisplay: summarizeMissingEntries(scopedEntries, row.missingParams),
@@ -422,18 +566,47 @@ function projectAuditRowsByView(rows, viewMode) {
         .filter(row => row._hasScopedData);
 }
 
-function computeGroupScores(rows) {
+function computeGroupStats(rows) {
+    const aggregate = {};
+    rows.forEach(row => {
+        const stats = normalizeGroupStatsMap(row.groupStats || {});
+        Object.entries(stats).forEach(([name, value]) => {
+            if (!aggregate[name]) {
+                aggregate[name] = { totalChecks: 0, failedChecks: 0, passedChecks: 0 };
+            }
+            aggregate[name].totalChecks += value.totalChecks;
+            aggregate[name].failedChecks += value.failedChecks;
+            aggregate[name].passedChecks += value.passedChecks;
+        });
+    });
+    return aggregate;
+}
+
+function computeGroupScores(rows, groupStats) {
+    const aggregateStats = groupStats || {};
+    if (Object.keys(aggregateStats).length > 0) {
+        const scores = {};
+        Object.entries(aggregateStats).forEach(([name, stats]) => {
+            const totalChecks = Number(stats?.totalChecks) || 0;
+            const failedChecks = Number(stats?.failedChecks) || 0;
+            if (totalChecks <= 0) return;
+            scores[name] = Math.round(((totalChecks - failedChecks) / totalChecks) * 100);
+        });
+        return scores;
+    }
+
     const totals = {};
     const counts = {};
     rows.forEach(row => {
-        const groupScores = row.groupScores || {};
-        Object.entries(groupScores).forEach(([name, score]) => {
+        const scores = row.groupScores || {};
+        Object.entries(scores).forEach(([name, score]) => {
             const numericScore = Number(score);
             if (!Number.isFinite(numericScore)) return;
             totals[name] = (totals[name] || 0) + numericScore;
             counts[name] = (counts[name] || 0) + 1;
         });
     });
+
     const averages = {};
     Object.keys(totals).forEach(name => {
         averages[name] = Math.round(totals[name] / counts[name]);
@@ -503,13 +676,16 @@ function buildScopedSummary(rows, baseSummary) {
     const averageScore = total > 0
         ? rows.reduce((acc, r) => acc + (Number(r.readinessPercent) || 0), 0) / total
         : 0;
+    const groupStats = computeGroupStats(rows);
+    const groupScores = computeGroupScores(rows, groupStats);
 
     return {
         ...baseSummary,
         overallReadinessPercent: averageScore,
         fullyReady: fullyReady,
         totalAudited: total,
-        groupScores: computeGroupScores(rows)
+        groupScores: groupScores,
+        groupStats: groupStats
     };
 }
 
@@ -526,7 +702,7 @@ function getScoreClass(percent) {
 /**
  * Render inline group badges for a row
  */
-function renderRowGroupBadges(groupScores) {
+function renderRowGroupBadges(groupScores, groupStats) {
     if (!groupScores || Object.keys(groupScores).length === 0) {
         return '-';
     }
@@ -542,7 +718,11 @@ function renderRowGroupBadges(groupScores) {
         const abbrev = name.startsWith('Type:')
             ? `T:${name.replace(/^Type:\s*/i, '').substring(0, 3)}`
             : name.substring(0, 3);
-        return `<span class="group-badge-sm ${scoreClass}" title="${escapeHtml(name)}: ${pct}%">${abbrev} ${pct}%</span>`;
+        const stats = groupStats?.[name] || null;
+        const totalChecks = Number(stats?.totalChecks) || 0;
+        const failedChecks = Number(stats?.failedChecks) || 0;
+        const countHint = totalChecks > 0 ? ` | ${Math.max(0, totalChecks - failedChecks)}/${totalChecks}` : '';
+        return `<span class="group-badge-sm ${scoreClass}" title="${escapeHtml(name)}: ${pct}%${countHint}">${abbrev} ${pct}%</span>`;
     }).join(' ');
 
     return remaining > 0
@@ -566,7 +746,7 @@ function renderTable(rows) {
     rows.forEach(row => {
         const tr = document.createElement('tr');
         const readinessClass = getReadinessClass(row.readinessPercent);
-        const groupBadgesHtml = renderRowGroupBadges(row.groupScores);
+        const groupBadgesHtml = renderRowGroupBadges(row.groupScores, row.groupStats);
         const statusBadge = getStatusBadge(row.readinessPercent, row.missingCount);
         const missingFields = normalizeMissingFieldEntries(row.missingFields, row.missingParams);
         const canFix = row.missingCount > 0;

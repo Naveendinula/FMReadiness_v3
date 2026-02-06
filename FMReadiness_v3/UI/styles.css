@@ -181,10 +181,30 @@ body {
 
 .group-badge .group-name { color: #525252; }
 .group-badge .group-pct { font-weight: 600; color: #0a0a0a; }
+.group-badge .group-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: #737373;
+    border: 1px solid #e5e5e5;
+    border-radius: 999px;
+    padding: 1px 6px;
+    background: #fff;
+}
+.group-badge .group-info {
+    font-size: 12px;
+    color: #a3a3a3;
+    line-height: 1;
+}
 .group-badge.score-100 .group-pct { color: #16a34a; }
 .group-badge.score-high .group-pct { color: #22c55e; }
 .group-badge.score-medium .group-pct { color: #f59e0b; }
 .group-badge.score-low .group-pct { color: #ef4444; }
+
+.group-score-help {
+    font-size: 12px;
+    color: #737373;
+    margin: -6px 0 14px;
+}
 
 /* Controls */
 .controls {
