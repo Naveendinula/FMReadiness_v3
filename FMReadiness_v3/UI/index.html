@@ -74,6 +74,9 @@
             <div class="group-scores" id="groupScores">
                 <!-- Populated by JS -->
             </div>
+            <div class="category-scores" id="categoryScores">
+                <!-- Populated by JS -->
+            </div>
 
             <!-- Controls -->
             <div class="controls">
@@ -81,6 +84,19 @@
                 <label class="checkbox-label">
                     <input type="checkbox" id="showMissingOnly" />
                     Show only incomplete
+                </label>
+                <label class="audit-mode-label">
+                    <span>Category</span>
+                    <select id="categoryFilter" class="audit-mode-select">
+                        <option value="all">All categories</option>
+                    </select>
+                </label>
+                <label class="audit-mode-label">
+                    <span>Audit scope</span>
+                    <select id="auditScoreMode" class="audit-mode-select">
+                        <option value="all" selected>All editable fields</option>
+                        <option value="required">Required + unique only</option>
+                    </select>
                 </label>
             </div>
 

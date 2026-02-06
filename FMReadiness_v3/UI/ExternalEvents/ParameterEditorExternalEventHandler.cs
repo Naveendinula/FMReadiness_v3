@@ -145,9 +145,10 @@ namespace FMReadiness_v3.UI.ExternalEvents
 
                 var collector = new CollectorService(doc);
                 var elements = collector.GetAllFmElements();
+                var scoreMode = AuditProfileState.GetScoreMode();
 
                 var auditService = new AuditService();
-                var report = auditService.RunFullAudit(doc, elements, rules);
+                var report = auditService.RunFullAudit(doc, elements, rules, scoreMode);
                 report.AuditProfileName = profileName;
 
                 WebViewPaneController.UpdateFromReport(report);
@@ -1051,12 +1052,27 @@ namespace FMReadiness_v3.UI.ExternalEvents
                 // Ignore view-focus failures and still return selected element data.
             }
 
-            HandleGetSelectedElements(uidoc, doc);
+            var selectionIds = uidoc.Selection.GetElementIds();
+            if (selectionIds != null && selectionIds.Contains(elementId))
+            {
+                var snapshot = BuildSelectedElementsSnapshot(doc, selectionIds);
+                PostResult?.Invoke(snapshot.Json);
+            }
+            else
+            {
+                var snapshot = BuildSelectedElementsSnapshot(doc, new List<ElementId> { elementId });
+                PostResult?.Invoke(snapshot.Json);
+            }
         }
 
         private SelectedElementsSnapshot BuildSelectedElementsSnapshot(UIDocument uidoc, Document doc)
         {
             var selectedIds = uidoc.Selection.GetElementIds();
+            return BuildSelectedElementsSnapshot(doc, selectedIds);
+        }
+
+        private SelectedElementsSnapshot BuildSelectedElementsSnapshot(Document doc, ICollection<ElementId> selectedIds)
+        {
             var elements = new List<object>();
             var includedIds = new List<int>();
             // Allow COBie values for multi-select (up to 100 elements for performance)

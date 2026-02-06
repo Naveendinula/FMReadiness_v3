@@ -128,6 +128,15 @@ body {
 
 .group-scores:empty { display: none; }
 
+.category-scores {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.category-scores:empty { display: none; }
+
 .group-badge {
     display: inline-flex;
     align-items: center;
@@ -188,6 +197,29 @@ body {
     width: 16px;
     height: 16px;
     accent-color: #0a0a0a;
+}
+
+.audit-mode-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #525252;
+    white-space: nowrap;
+}
+
+.audit-mode-select {
+    padding: 6px 10px;
+    font-size: 12px;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    background: #fff;
+    color: #0a0a0a;
+    cursor: pointer;
+}
+
+.audit-mode-select:hover {
+    border-color: #d4d4d4;
 }
 
 /* Table Wrapper - constrains width */
@@ -275,7 +307,7 @@ body {
 #resultsTable th:nth-child(9),
 #resultsTable td:nth-child(9) { width: 60px; min-width: 60px; }  /* View */
 #resultsTable th:nth-child(10),
-#resultsTable td:nth-child(10) { width: 40px; min-width: 40px; } /* Actions */
+#resultsTable td:nth-child(10) { width: 180px; min-width: 180px; } /* Actions */
 
 #resultsTable td {
     padding: 14px 16px;
@@ -342,7 +374,7 @@ body {
 .group-badge-sm.score-low { background: #fee2e2; color: #991b1b; }
 
 /* Buttons */
-.select-btn, .open-view-btn, .fix-btn {
+.locate-btn, .open-view-btn, .fix-btn {
     padding: 6px 12px;
     font-size: 12px;
     font-weight: 500;
@@ -354,7 +386,7 @@ body {
     transition: all 0.15s ease;
 }
 
-.select-btn:hover, .open-view-btn:hover:enabled, .fix-btn:hover {
+.locate-btn:hover, .open-view-btn:hover:enabled {
     background: #0a0a0a;
     border-color: #0a0a0a;
     color: #fff;
@@ -362,7 +394,18 @@ body {
 
 .open-view-btn:disabled { cursor: not-allowed; opacity: 0.5; }
 .fix-btn:disabled { cursor: not-allowed; opacity: 0.5; }
-.fix-btn { margin-left: 6px; }
+.fix-btn {
+    margin-right: 6px;
+    background: #0a0a0a;
+    border-color: #0a0a0a;
+    color: #fff;
+}
+
+.fix-btn:hover {
+    background: #171717;
+    border-color: #171717;
+    color: #fff;
+}
 
 .view-select {
     width: 140px;

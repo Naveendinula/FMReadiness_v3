@@ -22,6 +22,7 @@ namespace FMReadiness_v3.Services
             public int FullyReadyAssets { get; set; }
             public double AverageReadinessScore { get; set; }
             public string AuditProfileName { get; set; } = string.Empty;
+            public AuditScoreMode ScoreMode { get; set; } = AuditScoreMode.AllEditable;
 
             public List<ElementAuditResult> ElementResults { get; set; } = new List<ElementAuditResult>();
 
@@ -30,12 +31,17 @@ namespace FMReadiness_v3.Services
             public Dictionary<string, List<int>> UniquenessViolations { get; set; } = new Dictionary<string, List<int>>();
         }
 
-        public AuditReport RunFullAudit(Document doc, IEnumerable<Element> elements, Dictionary<string, CategoryConfig> rules)
+        public AuditReport RunFullAudit(
+            Document doc,
+            IEnumerable<Element> elements,
+            Dictionary<string, CategoryConfig> rules,
+            AuditScoreMode scoreMode = AuditScoreMode.AllEditable)
         {
             var report = new AuditReport();
             if (doc == null || elements == null || rules == null || rules.Count == 0)
                 return report;
             var elementList = elements.ToList();
+            report.ScoreMode = scoreMode;
 
             // Phase 1: collect all field values for uniqueness checks.
             var fieldValuesMap = new Dictionary<int, Dictionary<string, string>>();
@@ -144,8 +150,9 @@ namespace FMReadiness_v3.Services
 
                 var missingFields = new List<MissingFieldInfo>();
                 var groupScores = new Dictionary<string, double>();
-                var totalRequired = 0;
+                var totalScored = 0;
                 var totalMissing = 0;
+                var scoreAllFields = scoreMode == AuditScoreMode.AllEditable;
 
                 foreach (var groupEntry in config.Groups)
                 {
@@ -165,7 +172,7 @@ namespace FMReadiness_v3.Services
                     {
                         var isRequired = IsFieldRequired(field);
                         var hasUniqueRule = HasRule(field, "unique");
-                        var isScoredField = isRequired || hasUniqueRule;
+                        var isScoredField = scoreAllFields || isRequired || hasUniqueRule;
                         if (!isScoredField)
                             continue;
 
@@ -173,7 +180,8 @@ namespace FMReadiness_v3.Services
                         fieldValues.TryGetValue(field.Key, out value);
                         var isMissing = string.IsNullOrWhiteSpace(value);
                         var isDuplicate = duplicateFields.Contains(field.Key);
-                        var isFailed = isDuplicate || (isRequired && isMissing);
+                        var countsMissing = scoreAllFields || isRequired;
+                        var isFailed = isDuplicate || (countsMissing && isMissing);
 
                         groupTotal++;
 
@@ -219,7 +227,7 @@ namespace FMReadiness_v3.Services
                     groupScoreSums[groupName] += groupScore;
                     groupScoreCounts[groupName]++;
 
-                    totalRequired += groupTotal;
+                    totalScored += groupTotal;
                     totalMissing += groupMissing;
                 }
 
@@ -233,7 +241,7 @@ namespace FMReadiness_v3.Services
                     }
                 }
 
-                var overallScore = totalRequired > 0 ? 1.0 - ((double)totalMissing / totalRequired) : 1.0;
+                var overallScore = totalScored > 0 ? 1.0 - ((double)totalMissing / totalScored) : 1.0;
                 overallScore = Clamp01(overallScore);
 
                 scoreSum += overallScore;

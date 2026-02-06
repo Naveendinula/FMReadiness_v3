@@ -40,9 +40,10 @@ namespace FMReadiness_v3.Commands
 
                 var collector = new CollectorService(doc);
                 var elements = collector.GetAllFmElements();
+                var scoreMode = AuditProfileState.GetScoreMode();
 
                 var auditService = new AuditService();
-                var report = auditService.RunFullAudit(doc, elements, rules);
+                var report = auditService.RunFullAudit(doc, elements, rules, scoreMode);
                 report.AuditProfileName = profileName;
 
                 WebViewPaneController.UpdateFromReport(report);
@@ -70,6 +71,7 @@ namespace FMReadiness_v3.Commands
                 var message =
                     "FM Readiness Summary\n" +
                     $"Audit profile: {profileName}\n" +
+                    $"Audit scope: {AuditProfileState.GetScoreModeLabel(scoreMode)}\n" +
                     $"Overall readiness: {Math.Round(readinessPct, 0)}%\n" +
                     $"Fully ready assets: {ready} / {total}\n\n" +
                     "-----------------------------------\n\n" +

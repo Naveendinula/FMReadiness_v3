@@ -163,6 +163,8 @@ namespace FMReadiness_v3.UI.Panes
                     fullyReady = report.FullyReadyAssets,
                     totalAudited = report.TotalAuditedAssets,
                     auditProfile = report.AuditProfileName,
+                    scoreMode = AuditProfileState.GetScoreModeKey(report.ScoreMode),
+                    scoreModeLabel = AuditProfileState.GetScoreModeLabel(report.ScoreMode),
                     groupScores = report.AverageGroupScores.ToDictionary(
                         kvp => kvp.Key,
                         kvp => (int)Math.Round(kvp.Value * 100))
@@ -316,6 +318,10 @@ namespace FMReadiness_v3.UI.Panes
             public int totalAudited { get; set; }
             [DataMember(Name = "auditProfile")]
             public string auditProfile { get; set; } = string.Empty;
+            [DataMember(Name = "scoreMode")]
+            public string scoreMode { get; set; } = "all";
+            [DataMember(Name = "scoreModeLabel")]
+            public string scoreModeLabel { get; set; } = string.Empty;
             [DataMember(Name = "groupScores")]
             public Dictionary<string, int> groupScores { get; set; } = new();
         }

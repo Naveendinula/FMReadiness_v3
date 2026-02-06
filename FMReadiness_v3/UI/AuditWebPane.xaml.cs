@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using Autodesk.Revit.UI;
+using FMReadiness_v3.Services;
 using FMReadiness_v3.UI.Panes;
 using Microsoft.Web.WebView2.Core;
 
@@ -182,6 +183,17 @@ namespace FMReadiness_v3.UI
                         WebViewPaneController.RequestParameterEditorOperation(
                             ExternalEvents.ParameterEditorExternalEventHandler.OperationType.CopyComputedToParam,
                             message);
+                        return;
+                    }
+
+                    if (string.Equals(action, "setAuditScoreMode", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (root.TryGetProperty("mode", out var modeProp))
+                        {
+                            AuditProfileState.SetScoreMode(modeProp.GetString());
+                        }
+
+                        WebViewPaneController.RequestAuditRefresh();
                         return;
                     }
 

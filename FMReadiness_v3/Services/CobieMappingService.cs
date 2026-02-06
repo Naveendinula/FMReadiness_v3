@@ -263,7 +263,7 @@ namespace FMReadiness_v3.Services
                 if (field.Scope == "type" && element is ElementType)
                 {
                     // Element is already a type
-                    var (success, _) = SetFieldValue(doc, element, null, field, value);
+                    var (success, _) = SetFieldValue(doc, element, element, field, value);
                     return success;
                 }
                 else if (field.Scope == "type")

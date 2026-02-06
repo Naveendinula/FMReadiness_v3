@@ -162,8 +162,8 @@ namespace FMReadiness_v3.Services
             if (CurrentPreset?.Categories == null)
                 return rules;
 
-            var fieldsByGroup = GetFieldsByGroup("Component");
-            var typeFields = GetAllFields("Type");
+            var componentGroups = GetFieldsByGroup("Component");
+            var typeGroups = GetFieldsByGroup("Type");
 
             foreach (var category in CurrentPreset.Categories)
             {
@@ -172,7 +172,7 @@ namespace FMReadiness_v3.Services
                     Groups = new Dictionary<string, GroupConfig>()
                 };
 
-                foreach (var groupEntry in fieldsByGroup)
+                foreach (var groupEntry in componentGroups)
                 {
                     var groupName = groupEntry.Key;
                     var fields = groupEntry.Value;
@@ -185,20 +185,20 @@ namespace FMReadiness_v3.Services
                     config.Groups[groupName] = groupConfig;
                 }
 
-                // Add type fields to MakeModel group if not already present
-                if (!config.Groups.ContainsKey("MakeModel"))
+                foreach (var groupEntry in typeGroups)
                 {
-                    config.Groups["MakeModel"] = new GroupConfig { Fields = new List<FieldSpec>() };
-                }
+                    var typeFields = groupEntry.Value
+                        .Where(f => string.Equals(f.Scope, "type", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
 
-                foreach (var typeField in typeFields.Where(f => f.Scope == "type"))
-                {
-                    var existingKeys = config.Groups["MakeModel"].Fields.Select(f => f.Key).ToHashSet();
-                    var cobieKey = typeField.CobieKey ?? string.Empty;
-                    if (!string.IsNullOrEmpty(cobieKey) && !existingKeys.Contains(cobieKey))
+                    if (typeFields.Count == 0)
+                        continue;
+
+                    var groupName = $"Type: {groupEntry.Key}";
+                    config.Groups[groupName] = new GroupConfig
                     {
-                        config.Groups["MakeModel"].Fields.Add(ConvertToFieldSpec(typeField));
-                    }
+                        Fields = typeFields.Select(f => ConvertToFieldSpec(f)).ToList()
+                    };
                 }
 
                 rules[category] = config;

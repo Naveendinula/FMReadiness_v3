@@ -32,8 +32,11 @@ const missingSublabelEl = document.getElementById('missingSublabel');
 const totalCountEl = document.getElementById('totalCount');
 const auditProfileLabelEl = document.getElementById('auditProfileLabel');
 const groupScoresEl = document.getElementById('groupScores');
+const categoryScoresEl = document.getElementById('categoryScores');
 const searchInput = document.getElementById('searchInput');
 const showMissingOnly = document.getElementById('showMissingOnly');
+const auditScoreModeEl = document.getElementById('auditScoreMode');
+const categoryFilterEl = document.getElementById('categoryFilter');
 const tableBody = document.getElementById('tableBody');
 const resultsTable = document.getElementById('resultsTable');
 const emptyState = document.getElementById('emptyState');
@@ -49,6 +52,7 @@ const cobieCategoryPreviewEl = document.getElementById('cobieCategoryPreview');
 const legacySelectedPreviewEl = document.getElementById('legacySelectedPreview');
 const legacyCategoryPreviewEl = document.getElementById('legacyCategoryPreview');
 const legacyTypePreviewEl = document.getElementById('legacyTypePreview');
+let skipNextEditorSelectionRefresh = false;
 
 // Cache of elementId -> views[]
 const viewsByElementId = new Map();
@@ -137,15 +141,23 @@ function receiveAudit(data) {
  */
 function render() {
     const { summary, rows } = window.auditData;
+    const baseSummary = summary || { auditProfile: '', scoreModeLabel: '', scoreMode: '' };
+
+    updateCategoryFilterOptions(rows);
+    const scopeCategory = categoryFilterEl?.value || 'all';
+    const scopedRows = scopeCategory === 'all'
+        ? rows
+        : rows.filter(row => row.category === scopeCategory);
+    const summaryToRender = rows.length > 0 ? buildScopedSummary(scopedRows, baseSummary) : null;
 
     // Update summary cards
-    if (summary) {
-        const pct = summary.overallReadinessPercent || 0;
+    if (summaryToRender) {
+        const pct = summaryToRender.overallReadinessPercent || 0;
         overallReadinessEl.textContent = `${Math.round(pct)}%`;
         overallReadinessEl.className = 'card-value ' + getReadinessClass(pct);
 
-        const fullyReady = summary.fullyReady || 0;
-        const totalAudited = summary.totalAudited || 0;
+        const fullyReady = summaryToRender.fullyReady || 0;
+        const totalAudited = summaryToRender.totalAudited || 0;
         const missing = totalAudited - fullyReady;
 
         fullyReadyCountEl.textContent = fullyReady;
@@ -156,13 +168,19 @@ function render() {
 
         totalCountEl.textContent = totalAudited;
         if (auditProfileLabelEl) {
-            auditProfileLabelEl.textContent = summary.auditProfile
-                ? `Audit profile: ${summary.auditProfile}`
+            const modeLabel = summary.scoreModeLabel ? ` • ${summary.scoreModeLabel}` : '';
+            auditProfileLabelEl.textContent = summaryToRender.auditProfile
+                ? `Audit profile: ${summaryToRender.auditProfile}${modeLabel}${scopeCategory !== 'all' ? ` • Category: ${scopeCategory}` : ''}`
                 : 'Audit profile: --';
         }
 
         // Render group score badges
-        renderGroupScores(summary.groupScores || {});
+        renderGroupScores(summaryToRender.groupScores || {});
+        renderCategoryScores(rows);
+
+        if (auditScoreModeEl && summaryToRender.scoreMode) {
+            auditScoreModeEl.value = summaryToRender.scoreMode;
+        }
     } else {
         overallReadinessEl.textContent = '--%';
         overallReadinessEl.className = 'card-value';
@@ -175,10 +193,13 @@ function render() {
             auditProfileLabelEl.textContent = 'Audit profile: --';
         }
         groupScoresEl.innerHTML = '';
+        if (categoryScoresEl) {
+            categoryScoresEl.innerHTML = '';
+        }
     }
 
     // Filter rows
-    const filteredRows = filterRows(rows);
+    const filteredRows = filterRows(scopedRows);
 
     // Update table
     if (filteredRows.length > 0) {
@@ -248,6 +269,97 @@ function renderGroupScores(groupScores) {
     }).join('');
 }
 
+function computeGroupScores(rows) {
+    const totals = {};
+    const counts = {};
+    rows.forEach(row => {
+        const groupScores = row.groupScores || {};
+        Object.entries(groupScores).forEach(([name, score]) => {
+            const numericScore = Number(score);
+            if (!Number.isFinite(numericScore)) return;
+            totals[name] = (totals[name] || 0) + numericScore;
+            counts[name] = (counts[name] || 0) + 1;
+        });
+    });
+    const averages = {};
+    Object.keys(totals).forEach(name => {
+        averages[name] = Math.round(totals[name] / counts[name]);
+    });
+    return averages;
+}
+
+function renderCategoryScores(rows) {
+    if (!categoryScoresEl) return;
+    if (!rows || rows.length === 0) {
+        categoryScoresEl.innerHTML = '';
+        return;
+    }
+
+    const stats = {};
+    rows.forEach(row => {
+        const category = row.category || 'Uncategorized';
+        if (!stats[category]) {
+            stats[category] = { total: 0, ready: 0, scoreSum: 0 };
+        }
+        stats[category].total += 1;
+        if (row.missingCount === 0) stats[category].ready += 1;
+        stats[category].scoreSum += Number(row.readinessPercent) || 0;
+    });
+
+    const sorted = Object.keys(stats).sort((a, b) => a.localeCompare(b));
+    categoryScoresEl.innerHTML = sorted.map(category => {
+        const data = stats[category];
+        const pct = data.total > 0 ? Math.round(data.scoreSum / data.total) : 0;
+        const scoreClass = getScoreClass(pct);
+        const label = `${category} (${data.total})`;
+        return `<div class="group-badge ${scoreClass}">
+            <span class="group-name">${escapeHtml(label)}</span>
+            <span class="group-pct">${pct}%</span>
+        </div>`;
+    }).join('');
+}
+
+function updateCategoryFilterOptions(rows) {
+    if (!categoryFilterEl) return;
+    const categories = Array.from(new Set((rows || []).map(r => r.category).filter(Boolean))).sort();
+    const nextValues = ['all', ...categories];
+    const currentValues = Array.from(categoryFilterEl.options).map(o => o.value);
+    const currentSelection = categoryFilterEl.value || 'all';
+
+    if (currentValues.join('|') !== nextValues.join('|')) {
+        categoryFilterEl.innerHTML = '';
+        const allOpt = document.createElement('option');
+        allOpt.value = 'all';
+        allOpt.textContent = 'All categories';
+        categoryFilterEl.appendChild(allOpt);
+
+        categories.forEach(category => {
+            const opt = document.createElement('option');
+            opt.value = category;
+            opt.textContent = category;
+            categoryFilterEl.appendChild(opt);
+        });
+    }
+
+    categoryFilterEl.value = nextValues.includes(currentSelection) ? currentSelection : 'all';
+}
+
+function buildScopedSummary(rows, baseSummary) {
+    const total = rows.length;
+    const fullyReady = rows.filter(r => r.missingCount === 0).length;
+    const averageScore = total > 0
+        ? rows.reduce((acc, r) => acc + (Number(r.readinessPercent) || 0), 0) / total
+        : 0;
+
+    return {
+        ...baseSummary,
+        overallReadinessPercent: averageScore,
+        fullyReady: fullyReady,
+        totalAudited: total,
+        groupScores: computeGroupScores(rows)
+    };
+}
+
 /**
  * Get score class for badges
  */
@@ -311,8 +423,8 @@ function renderTable(rows) {
                 <button class="open-view-btn" data-element-id="${row.elementId}" disabled>Open</button>
             </td>
             <td>
-                <button class="select-btn" data-id="${row.elementId}">Select</button>
                 <button class="fix-btn" data-id="${row.elementId}" data-missing-fields="${encodeURIComponent(JSON.stringify(missingFields))}" ${canFix ? '' : 'disabled'}>Fix</button>
+                <button class="locate-btn" data-id="${row.elementId}" title="Select and zoom in Revit">Locate</button>
             </td>
         `;
 
@@ -492,9 +604,28 @@ function open2dView(elementId, viewId) {
     }
 }
 
-function switchToEditorTab() {
+function switchToEditorTab(options = {}) {
     const btn = document.querySelector('.tab-btn[data-tab="editor"]');
-    if (btn) btn.click();
+    if (!btn) return;
+    if (options.skipSelectionRefresh) {
+        skipNextEditorSelectionRefresh = true;
+    }
+    btn.click();
+}
+
+function queueFixSelectionSync(elementId, attempt = 0) {
+    const maxAttempts = 4;
+    const delayMs = 150 + (attempt * 150);
+
+    setTimeout(() => {
+        const isSynced = editorState.selectedElements.some(e => e.elementId === elementId);
+        if (isSynced) return;
+
+        requestSelectedElements();
+        if (attempt + 1 < maxAttempts) {
+            queueFixSelectionSync(elementId, attempt + 1);
+        }
+    }, delayMs);
 }
 
 function startFixFromAudit(elementId, missingFields) {
@@ -502,8 +633,10 @@ function startFixFromAudit(elementId, missingFields) {
         elementId: elementId,
         missingFields: normalizeMissingFieldEntries(missingFields, null)
     };
+
+    switchToEditorTab({ skipSelectionRefresh: true });
     requestFixElementSelection(elementId);
-    switchToEditorTab();
+    queueFixSelectionSync(elementId);
 }
 
 function clearFixHighlights() {
@@ -621,9 +754,25 @@ showMissingOnly.addEventListener('change', () => {
     render();
 });
 
+categoryFilterEl?.addEventListener('change', () => {
+    render();
+});
+
+if (auditScoreModeEl) {
+    auditScoreModeEl.addEventListener('change', () => {
+        const mode = auditScoreModeEl.value;
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.postMessage({
+                action: 'setAuditScoreMode',
+                mode: mode
+            });
+        }
+    });
+}
+
 // Table row click (event delegation)
 tableBody.addEventListener('click', (e) => {
-    const btn = e.target.closest('.select-btn');
+    const btn = e.target.closest('.locate-btn');
     if (btn) {
         const elementId = parseInt(btn.dataset.id, 10);
         if (!isNaN(elementId)) {
@@ -653,7 +802,7 @@ tableBody.addEventListener('click', (e) => {
 
     // Clicking a row (but not the dropdown/select button) triggers 2D view request
     const row = e.target.closest('tr');
-    if (row && !e.target.closest('.select-btn') && !e.target.closest('.fix-btn') && !e.target.closest('.view-select') && !e.target.closest('.open-view-btn')) {
+    if (row && !e.target.closest('.locate-btn') && !e.target.closest('.fix-btn') && !e.target.closest('.view-select') && !e.target.closest('.open-view-btn')) {
         const firstCell = row.querySelector('td');
         const elementId = firstCell ? parseInt(firstCell.textContent, 10) : NaN;
         if (!isNaN(elementId) && !viewsByElementId.has(elementId)) {
@@ -711,7 +860,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         document.getElementById(`tab-${tabId}`).classList.add('active');
 
         if (tabId === 'editor') {
-            requestSelectedElements();
+            if (skipNextEditorSelectionRefresh) {
+                skipNextEditorSelectionRefresh = false;
+            } else {
+                requestSelectedElements();
+            }
             setSelectionSyncState();
             updateScopeCategoryVisibility();
         }
@@ -995,8 +1148,9 @@ document.getElementById('applyCobieToSelected')?.addEventListener('click', () =>
         return;
     }
 
-    if (!validateCobieInputs(includedInputs)) {
-        showToast('Fix invalid field values before applying', 'error');
+    const invalidCobieFields = getInvalidCobieFields(includedInputs);
+    if (invalidCobieFields.length > 0) {
+        showToast(`Fix invalid field values: ${formatInvalidFieldList(invalidCobieFields)}`, 'error');
         return;
     }
     
@@ -1022,8 +1176,9 @@ document.getElementById('applyCobieType')?.addEventListener('click', () => {
         return;
     }
 
-    if (!validateCobieInputs(includedInputs)) {
-        showToast('Fix invalid field values before applying', 'error');
+    const invalidCobieFields = getInvalidCobieFields(includedInputs);
+    if (invalidCobieFields.length > 0) {
+        showToast(`Fix invalid field values: ${formatInvalidFieldList(invalidCobieFields)}`, 'error');
         return;
     }
     
@@ -1057,8 +1212,9 @@ document.getElementById('applyCobieToCategory')?.addEventListener('click', () =>
         return;
     }
 
-    if (!validateCobieInputs(includedInputs)) {
-        showToast('Fix invalid field values before applying', 'error');
+    const invalidCobieFields = getInvalidCobieFields(includedInputs);
+    if (invalidCobieFields.length > 0) {
+        showToast(`Fix invalid field values: ${formatInvalidFieldList(invalidCobieFields)}`, 'error');
         return;
     }
     
@@ -1095,12 +1251,20 @@ function collectCobieFieldValues(prefix, includeMetadata = false) {
         const cobieKey = input.dataset.cobieKey;
         const revitParam = input.dataset.revitParam;
         const isModified = input.getAttribute('data-user-modified') === 'true';
+        const dataType = (input.dataset?.type || '').toLowerCase();
+        let normalizedValue = value;
+        if (dataType === 'date' && value) {
+            const normalized = normalizeDateValue(value);
+            if (normalized) {
+                normalizedValue = normalized;
+            }
+        }
         
         if (!cobieKey && !revitParam) return;
         
-        if (isModified && value) {
+        if (isModified && normalizedValue) {
             fieldValues[cobieKey || revitParam] = {
-                value: value,
+                value: normalizedValue,
                 cobieKey: cobieKey,
                 revitParam: revitParam
             };
@@ -1129,12 +1293,80 @@ function readElementCount(elementId) {
     return match ? parseInt(match[1], 10) : null;
 }
 
-function isIsoDate(value) {
+function formatDateValue(year, month, day) {
+    if (!Number.isInteger(year) || year < 1) return null;
+    if (!Number.isInteger(month) || month < 1 || month > 12) return null;
+    if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+        return null;
+    }
+    const yyyy = String(year).padStart(4, '0');
+    const mm = String(month).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function normalizeDateValue(value) {
     const trimmed = (value || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
-    const date = new Date(`${trimmed}T00:00:00`);
-    if (Number.isNaN(date.getTime())) return false;
-    return date.toISOString().startsWith(trimmed);
+    if (!trimmed) return null;
+
+    const isoWithTime = trimmed.match(/^(\d{4}-\d{2}-\d{2})(?:[T ].*)$/);
+    if (isoWithTime) {
+        return normalizeDateValue(isoWithTime[1]);
+    }
+
+    let match = trimmed.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (match) {
+        return formatDateValue(parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10));
+    }
+
+    match = trimmed.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+    if (match) {
+        return formatDateValue(parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10));
+    }
+
+    match = trimmed.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+    if (match) {
+        const first = parseInt(match[1], 10);
+        const second = parseInt(match[2], 10);
+        const year = parseInt(match[3], 10);
+        let month = first;
+        let day = second;
+        if (first > 12 && second <= 12) {
+            day = first;
+            month = second;
+        } else if (second > 12 && first <= 12) {
+            day = second;
+            month = first;
+        }
+        return formatDateValue(year, month, day);
+    }
+
+    return null;
+}
+
+function isValidDateValue(value) {
+    return !!normalizeDateValue(value);
+}
+
+function normalizeDateInputValue(input) {
+    if (!input) return null;
+    const value = input.value?.trim() || '';
+    if (!value) {
+        input.classList.remove('invalid-value');
+        return null;
+    }
+    const normalized = normalizeDateValue(value);
+    if (normalized) {
+        if (input.getAttribute('data-user-modified') === 'true' && normalized !== value) {
+            input.value = normalized;
+        }
+        input.classList.remove('invalid-value');
+        return normalized;
+    }
+    input.classList.add('invalid-value');
+    return null;
 }
 
 function validateCobieInput(input) {
@@ -1148,7 +1380,7 @@ function validateCobieInput(input) {
 
     let valid = true;
     if (dataType === 'date') {
-        valid = isIsoDate(value);
+        valid = isValidDateValue(value);
     } else if (dataType === 'number') {
         valid = Number.isFinite(Number(value));
     }
@@ -1162,6 +1394,54 @@ function validateCobieInputs(inputs) {
     return inputs.every(validateCobieInput);
 }
 
+function getInputLabel(inputElement) {
+    if (!inputElement) return '';
+    const datasetLabel = inputElement.dataset?.label;
+    if (datasetLabel) return datasetLabel.trim();
+    const formGroup = inputElement.closest('.form-group');
+    const labelEl = formGroup?.querySelector('label');
+    const labelText = labelEl?.textContent?.trim();
+    if (labelText) return labelText;
+    const cobieKey = inputElement.dataset?.cobieKey;
+    if (cobieKey) return cobieKey.trim();
+    const revitParam = inputElement.dataset?.revitParam;
+    if (revitParam) return revitParam.trim();
+    return inputElement.id || '';
+}
+
+function formatInvalidFieldList(labels, maxItems = 4) {
+    const uniqueLabels = Array.from(new Set(labels.filter(Boolean)));
+    if (uniqueLabels.length === 0) return 'unknown fields';
+    if (uniqueLabels.length <= maxItems) return uniqueLabels.join(', ');
+    return `${uniqueLabels.slice(0, maxItems).join(', ')} +${uniqueLabels.length - maxItems} more`;
+}
+
+function getInvalidCobieFields(inputs) {
+    if (!Array.isArray(inputs) || inputs.length === 0) return [];
+    const invalidLabels = [];
+    inputs.forEach(inputElement => {
+        if (!validateCobieInput(inputElement)) {
+            const label = getInputLabel(inputElement);
+            if (label) invalidLabels.push(label);
+        }
+    });
+    return Array.from(new Set(invalidLabels));
+}
+
+function getInvalidLegacyFields(inputEntries) {
+    if (!Array.isArray(inputEntries) || inputEntries.length === 0) return [];
+    const invalidLabels = [];
+    inputEntries.forEach(entry => {
+        const inputElement = entry.input;
+        const fieldName = entry.field;
+        if (!validateLegacyInput(fieldName, inputElement)) {
+            const label = getInputLabel(inputElement) || fieldName;
+            if (label) invalidLabels.push(label);
+        }
+    });
+    return Array.from(new Set(invalidLabels));
+}
+
 function validateLegacyInput(fieldName, input) {
     if (!input) return true;
     const value = input.value?.trim() || '';
@@ -1173,7 +1453,7 @@ function validateLegacyInput(fieldName, input) {
 
     let valid = true;
     if (legacyDateFields.has(fieldName)) {
-        valid = isIsoDate(value);
+        valid = isValidDateValue(value);
     } else if (fieldName === 'FM_PMFrequencyDays') {
         valid = Number.isInteger(Number(value)) && Number(value) > 0;
     }
@@ -1196,7 +1476,14 @@ function collectLegacySelectedParams() {
         if (!value) return;
         if (input.getAttribute('data-user-modified') !== 'true') return;
 
-        params[field] = value;
+        let normalizedValue = value;
+        if (legacyDateFields.has(field)) {
+            const normalized = normalizeDateValue(value);
+            if (normalized) {
+                normalizedValue = normalized;
+            }
+        }
+        params[field] = normalizedValue;
         includedInputs.push({ field, input });
     });
 
@@ -1214,7 +1501,14 @@ function collectLegacyCategoryParams() {
         const value = input.value?.trim() || '';
         if (!value) return;
         if (input.getAttribute('data-user-modified') !== 'true') return;
-        params[field] = value;
+        let normalizedValue = value;
+        if (legacyDateFields.has(field)) {
+            const normalized = normalizeDateValue(value);
+            if (normalized) {
+                normalizedValue = normalized;
+            }
+        }
+        params[field] = normalizedValue;
         includedInputs.push({ field, input });
     });
 
@@ -2070,6 +2364,28 @@ document.getElementById('tab-editor')?.addEventListener('change', (e) => {
     updateApplyPreviews();
 });
 
+document.getElementById('tab-editor')?.addEventListener('focusout', (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+    if (target.type === 'checkbox') return;
+
+    if (target.classList.contains('cobie-field-input')) {
+        const dataType = (target.dataset?.type || '').toLowerCase();
+        if (dataType === 'date') {
+            normalizeDateInputValue(target);
+        }
+        validateCobieInput(target);
+    } else if (target.id?.startsWith('edit_') || target.id?.startsWith('bulk_') || target.id?.startsWith('type_')) {
+        const fieldName = target.id.replace(/^(edit_|bulk_|type_)/, '');
+        if (legacyDateFields.has(fieldName)) {
+            normalizeDateInputValue(target);
+        }
+        validateLegacyInput(fieldName, target);
+    }
+
+    updateApplyPreviews();
+});
+
 autoSyncSelectionEl?.addEventListener('change', () => {
     setSelectionSyncState();
 });
@@ -2105,9 +2421,9 @@ document.getElementById('applyToSelected')?.addEventListener('click', () => {
         return;
     }
 
-    const allValid = includedInputs.every(item => validateLegacyInput(item.field, item.input));
-    if (!allValid) {
-        showToast('Fix invalid field values before applying', 'error');
+    const invalidLegacyFields = getInvalidLegacyFields(includedInputs);
+    if (invalidLegacyFields.length > 0) {
+        showToast(`Fix invalid field values: ${formatInvalidFieldList(invalidLegacyFields)}`, 'error');
         return;
     }
     
@@ -2143,9 +2459,9 @@ document.getElementById('applyToCategory')?.addEventListener('click', () => {
         return;
     }
 
-    const allValid = includedInputs.every(item => validateLegacyInput(item.field, item.input));
-    if (!allValid) {
-        showToast('Fix invalid field values before applying', 'error');
+    const invalidLegacyFields = getInvalidLegacyFields(includedInputs);
+    if (invalidLegacyFields.length > 0) {
+        showToast(`Fix invalid field values: ${formatInvalidFieldList(invalidLegacyFields)}`, 'error');
         return;
     }
     

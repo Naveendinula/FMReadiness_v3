@@ -1,12 +1,20 @@
+using System;
 using System.Collections.Generic;
 
 namespace FMReadiness_v3.Services
 {
+    public enum AuditScoreMode
+    {
+        RequiredOnly,
+        AllEditable
+    }
+
     public static class AuditProfileState
     {
         private static readonly object SyncRoot = new();
         private static string? _activePresetFile;
         private static string? _activePresetName;
+        private static AuditScoreMode _scoreMode = AuditScoreMode.AllEditable;
 
         public static void SetActivePreset(string? presetFile, string? presetName = null)
         {
@@ -15,6 +23,65 @@ namespace FMReadiness_v3.Services
                 _activePresetFile = string.IsNullOrWhiteSpace(presetFile) ? null : presetFile;
                 _activePresetName = string.IsNullOrWhiteSpace(presetName) ? null : presetName;
             }
+        }
+
+        public static void SetScoreMode(AuditScoreMode mode)
+        {
+            lock (SyncRoot)
+            {
+                _scoreMode = mode;
+            }
+        }
+
+        public static void SetScoreMode(string? mode)
+        {
+            if (!TryParseScoreMode(mode, out var parsed))
+                return;
+
+            SetScoreMode(parsed);
+        }
+
+        public static AuditScoreMode GetScoreMode()
+        {
+            lock (SyncRoot)
+            {
+                return _scoreMode;
+            }
+        }
+
+        public static string GetScoreModeKey(AuditScoreMode mode)
+        {
+            return mode == AuditScoreMode.RequiredOnly ? "required" : "all";
+        }
+
+        public static string GetScoreModeLabel(AuditScoreMode mode)
+        {
+            return mode == AuditScoreMode.RequiredOnly
+                ? "Required + unique only"
+                : "All editable fields";
+        }
+
+        private static bool TryParseScoreMode(string? mode, out AuditScoreMode scoreMode)
+        {
+            scoreMode = AuditScoreMode.AllEditable;
+            if (string.IsNullOrWhiteSpace(mode))
+                return false;
+
+            if (string.Equals(mode, "required", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "requiredOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                scoreMode = AuditScoreMode.RequiredOnly;
+                return true;
+            }
+
+            if (string.Equals(mode, "all", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "allEditable", StringComparison.OrdinalIgnoreCase))
+            {
+                scoreMode = AuditScoreMode.AllEditable;
+                return true;
+            }
+
+            return false;
         }
 
         public static (string? presetFile, string? presetName) GetActivePreset()
