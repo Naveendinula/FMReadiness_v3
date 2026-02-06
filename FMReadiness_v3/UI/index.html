@@ -191,6 +191,25 @@
                 <div id="selectedElementInfo" class="selection-info">
                     <p class="placeholder-text">Select elements in Revit to begin</p>
                 </div>
+                <div id="selectionTray" class="selection-tray hidden">
+                    <button class="selection-tray-toggle" id="selectionTrayToggle" title="Expand selection list">
+                        <span>Selection list</span>
+                        <span id="selectionTrayCount" class="selection-tray-count">0</span>
+                        <span class="collapse-icon">▼</span>
+                    </button>
+                    <div id="selectionTrayContent" class="selection-tray-content hidden">
+                        <div class="selection-tray-actions">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="selectionTraySelectAll">
+                                Select all
+                            </label>
+                            <button class="btn-secondary btn-sm" id="removeCheckedSelection" disabled>Remove checked</button>
+                            <button class="btn-secondary btn-sm" id="keepCheckedSelection" disabled>Keep checked</button>
+                            <button class="btn-secondary btn-sm" id="clearSelectionList">Clear all</button>
+                        </div>
+                        <div id="selectionTrayList" class="selection-tray-list"></div>
+                    </div>
+                </div>
                 <div id="fixBanner" class="fix-banner hidden"></div>
                 <!-- Multi-select legend (shown when multiple elements selected) -->
                 <div id="multiSelectLegend" class="multi-select-legend hidden">

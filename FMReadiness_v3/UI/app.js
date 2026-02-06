@@ -52,7 +52,18 @@ const cobieCategoryPreviewEl = document.getElementById('cobieCategoryPreview');
 const legacySelectedPreviewEl = document.getElementById('legacySelectedPreview');
 const legacyCategoryPreviewEl = document.getElementById('legacyCategoryPreview');
 const legacyTypePreviewEl = document.getElementById('legacyTypePreview');
+const selectionTrayEl = document.getElementById('selectionTray');
+const selectionTrayToggleEl = document.getElementById('selectionTrayToggle');
+const selectionTrayCountEl = document.getElementById('selectionTrayCount');
+const selectionTrayContentEl = document.getElementById('selectionTrayContent');
+const selectionTrayListEl = document.getElementById('selectionTrayList');
+const selectionTraySelectAllEl = document.getElementById('selectionTraySelectAll');
+const removeCheckedSelectionEl = document.getElementById('removeCheckedSelection');
+const keepCheckedSelectionEl = document.getElementById('keepCheckedSelection');
+const clearSelectionListEl = document.getElementById('clearSelectionList');
 let skipNextEditorSelectionRefresh = false;
+let selectionTrayExpanded = false;
+const selectionTrayCheckedIds = new Set();
 
 // Cache of elementId -> views[]
 const viewsByElementId = new Map();
@@ -637,6 +648,81 @@ function startFixFromAudit(elementId, missingFields) {
     switchToEditorTab({ skipSelectionRefresh: true });
     requestFixElementSelection(elementId);
     queueFixSelectionSync(elementId);
+}
+
+function getCurrentSelectionIds() {
+    return editorState.selectedElements
+        .map(e => Number(e.elementId))
+        .filter(Number.isFinite);
+}
+
+function normalizeSelectionTrayState() {
+    const currentIds = new Set(getCurrentSelectionIds());
+    Array.from(selectionTrayCheckedIds).forEach(id => {
+        if (!currentIds.has(id)) {
+            selectionTrayCheckedIds.delete(id);
+        }
+    });
+}
+
+function updateSelectionTrayActionState() {
+    const checkedCount = selectionTrayCheckedIds.size;
+    if (removeCheckedSelectionEl) removeCheckedSelectionEl.disabled = checkedCount === 0;
+    if (keepCheckedSelectionEl) keepCheckedSelectionEl.disabled = checkedCount === 0;
+
+    const currentIds = getCurrentSelectionIds();
+    if (selectionTraySelectAllEl) {
+        selectionTraySelectAllEl.checked = currentIds.length > 0 && checkedCount === currentIds.length;
+        selectionTraySelectAllEl.indeterminate = checkedCount > 0 && checkedCount < currentIds.length;
+    }
+}
+
+function renderSelectionTray() {
+    if (!selectionTrayEl || !selectionTrayListEl || !selectionTrayCountEl) return;
+
+    const elements = editorState.selectedElements || [];
+    if (elements.length <= 1) {
+        selectionTrayEl.classList.add('hidden');
+        selectionTrayExpanded = false;
+        selectionTrayCheckedIds.clear();
+        selectionTrayContentEl?.classList.add('hidden');
+        if (selectionTraySelectAllEl) {
+            selectionTraySelectAllEl.checked = false;
+            selectionTraySelectAllEl.indeterminate = false;
+        }
+        updateSelectionTrayActionState();
+        return;
+    }
+
+    normalizeSelectionTrayState();
+    selectionTrayEl.classList.remove('hidden');
+    selectionTrayCountEl.textContent = `${elements.length}`;
+    if (selectionTrayContentEl) {
+        selectionTrayContentEl.classList.toggle('hidden', !selectionTrayExpanded);
+    }
+
+    selectionTrayListEl.innerHTML = elements.map(el => {
+        const id = Number(el.elementId);
+        const checked = selectionTrayCheckedIds.has(id) ? 'checked' : '';
+        const category = escapeHtml(el.category || '-');
+        const typeName = escapeHtml(el.typeName || el.type || '-');
+        return `
+            <div class="selection-tray-row">
+                <input type="checkbox" class="selection-tray-check" data-id="${id}" ${checked}>
+                <span class="selection-tray-id">${id}</span>
+                <span>${category}</span>
+                <span>${typeName}</span>
+                <button class="selection-tray-remove" data-id="${id}">Remove</button>
+            </div>
+        `;
+    }).join('');
+
+    updateSelectionTrayActionState();
+}
+
+function applySelectionIdsFromTray(nextIds, successMessage) {
+    setSelectionElements(nextIds);
+    if (successMessage) showToast(successMessage, 'success');
 }
 
 function clearFixHighlights() {
@@ -1756,6 +1842,15 @@ function requestFixElementSelection(elementId) {
     }
 }
 
+function setSelectionElements(elementIds) {
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({
+            action: 'setSelectionElements',
+            elementIds: elementIds
+        });
+    }
+}
+
 function setSelectionSyncState() {
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.postMessage({
@@ -1861,6 +1956,7 @@ function receiveSelectedElementsData(msg) {
     editorState.selectedElements = elements;
     editorState.currentTypeId = null;
     editorState.currentTypeInfo = null;
+    renderSelectionTray();
     
     const infoEl = document.getElementById('selectedElementInfo');
     const formEl = document.getElementById('instanceParamsForm');
@@ -2419,6 +2515,73 @@ applyScopeEl?.addEventListener('click', () => {
 // Refresh selection button
 document.getElementById('refreshSelection')?.addEventListener('click', () => {
     requestSelectedElements();
+});
+
+selectionTrayToggleEl?.addEventListener('click', () => {
+    selectionTrayExpanded = !selectionTrayExpanded;
+    const icon = selectionTrayToggleEl.querySelector('.collapse-icon');
+    if (icon) icon.textContent = selectionTrayExpanded ? '▲' : '▼';
+    renderSelectionTray();
+});
+
+selectionTrayListEl?.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('.selection-tray-remove');
+    if (!removeBtn) return;
+
+    const elementId = Number(removeBtn.dataset.id);
+    if (!Number.isFinite(elementId)) return;
+
+    const nextIds = getCurrentSelectionIds().filter(id => id !== elementId);
+    selectionTrayCheckedIds.delete(elementId);
+    applySelectionIdsFromTray(nextIds, `Removed element ${elementId} from selection`);
+});
+
+selectionTrayListEl?.addEventListener('change', (e) => {
+    const check = e.target.closest('.selection-tray-check');
+    if (!check) return;
+
+    const elementId = Number(check.dataset.id);
+    if (!Number.isFinite(elementId)) return;
+
+    if (check.checked) {
+        selectionTrayCheckedIds.add(elementId);
+    } else {
+        selectionTrayCheckedIds.delete(elementId);
+    }
+    updateSelectionTrayActionState();
+});
+
+selectionTraySelectAllEl?.addEventListener('change', () => {
+    const currentIds = getCurrentSelectionIds();
+    selectionTrayCheckedIds.clear();
+    if (selectionTraySelectAllEl.checked) {
+        currentIds.forEach(id => selectionTrayCheckedIds.add(id));
+    }
+    renderSelectionTray();
+});
+
+removeCheckedSelectionEl?.addEventListener('click', () => {
+    const checkedIds = new Set(selectionTrayCheckedIds);
+    if (checkedIds.size === 0) return;
+
+    const nextIds = getCurrentSelectionIds().filter(id => !checkedIds.has(id));
+    selectionTrayCheckedIds.clear();
+    applySelectionIdsFromTray(nextIds, `Removed ${checkedIds.size} selected element(s)`);
+});
+
+keepCheckedSelectionEl?.addEventListener('click', () => {
+    const checkedIds = new Set(selectionTrayCheckedIds);
+    if (checkedIds.size === 0) return;
+
+    const nextIds = getCurrentSelectionIds().filter(id => checkedIds.has(id));
+    selectionTrayCheckedIds.clear();
+    applySelectionIdsFromTray(nextIds, `Kept ${nextIds.length} selected element(s)`);
+});
+
+clearSelectionListEl?.addEventListener('click', () => {
+    if (editorState.selectedElements.length === 0) return;
+    selectionTrayCheckedIds.clear();
+    applySelectionIdsFromTray([], 'Selection cleared');
 });
 
 // Apply to Selected button

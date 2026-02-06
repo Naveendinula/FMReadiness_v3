@@ -130,6 +130,14 @@ namespace FMReadiness_v3.UI
                         return;
                     }
 
+                    if (string.Equals(action, "setSelectionElements", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WebViewPaneController.RequestParameterEditorOperation(
+                            ExternalEvents.ParameterEditorExternalEventHandler.OperationType.SetSelectionElements,
+                            message);
+                        return;
+                    }
+
                     if (string.Equals(action, "setSelectionSyncState", StringComparison.OrdinalIgnoreCase))
                     {
                         var autoSync = root.TryGetProperty("autoSync", out var autoSyncProp) && autoSyncProp.GetBoolean();

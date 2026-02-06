@@ -23,6 +23,7 @@ namespace FMReadiness_v3.UI.ExternalEvents
         {
             GetSelectedElements,
             FocusFixElement,
+            SetSelectionElements,
             ApplySelectionScope,
             GetCategoryStats,
             SetInstanceParams,
@@ -68,6 +69,9 @@ namespace FMReadiness_v3.UI.ExternalEvents
                         break;
                     case OperationType.FocusFixElement:
                         HandleFocusFixElement(uidoc, doc);
+                        break;
+                    case OperationType.SetSelectionElements:
+                        HandleSetSelectionElements(uidoc, doc);
                         break;
                     case OperationType.ApplySelectionScope:
                         HandleApplySelectionScope(uidoc, doc);
@@ -1063,6 +1067,54 @@ namespace FMReadiness_v3.UI.ExternalEvents
                 var snapshot = BuildSelectedElementsSnapshot(doc, new List<ElementId> { elementId });
                 PostResult?.Invoke(snapshot.Json);
             }
+        }
+
+        private void HandleSetSelectionElements(UIDocument uidoc, Document doc)
+        {
+            if (string.IsNullOrWhiteSpace(JsonPayload))
+            {
+                SendOperationResult(false, "No selection payload");
+                return;
+            }
+
+            using var jsonDoc = JsonDocument.Parse(JsonPayload);
+            if (!jsonDoc.RootElement.TryGetProperty("elementIds", out var idsProp)
+                || idsProp.ValueKind != JsonValueKind.Array)
+            {
+                SendOperationResult(false, "No elementIds provided");
+                return;
+            }
+
+            var targetIds = new List<ElementId>();
+            foreach (var idProp in idsProp.EnumerateArray())
+            {
+                if (idProp.ValueKind != JsonValueKind.Number || !idProp.TryGetInt32(out var idValue))
+                    continue;
+
+                var elementId = new ElementId(idValue);
+                var element = doc.GetElement(elementId);
+                if (element == null || !IsTargetCategory(element))
+                    continue;
+
+                targetIds.Add(elementId);
+            }
+
+            uidoc.Selection.SetElementIds(targetIds);
+
+            if (targetIds.Count == 1)
+            {
+                try
+                {
+                    uidoc.ShowElements(targetIds[0]);
+                }
+                catch
+                {
+                    // Ignore view-focus failures.
+                }
+            }
+
+            var snapshot = BuildSelectedElementsSnapshot(doc, uidoc.Selection.GetElementIds());
+            PostResult?.Invoke(snapshot.Json);
         }
 
         private SelectedElementsSnapshot BuildSelectedElementsSnapshot(UIDocument uidoc, Document doc)
