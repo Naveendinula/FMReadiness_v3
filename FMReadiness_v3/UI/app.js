@@ -1606,6 +1606,7 @@ function populateCobieFieldsFromElement(element) {
         const fieldId = `instance_${(field.cobieKey || '').replace(/\./g, '_')}`;
         const input = document.getElementById(fieldId);
         if (!input) return;
+        resetInputFromMultiState(input);
         
         // Try COBie param first, then revitParam, then aliases
         let value = cobieInstanceParams[field.cobieKey] || 
@@ -1613,8 +1614,6 @@ function populateCobieFieldsFromElement(element) {
                     (field.aliasParams || []).map(a => instanceParams[a]).find(v => v);
         
         input.value = value || '';
-        input.classList.remove('fix-target');
-        input.removeAttribute('data-user-modified');
         
         // Update visual state
         if (field.required && !value) {
@@ -1635,13 +1634,12 @@ function populateCobieFieldsFromElement(element) {
         const fieldId = `type_${(field.cobieKey || '').replace(/\./g, '_')}`;
         const input = document.getElementById(fieldId);
         if (!input) return;
+        resetInputFromMultiState(input);
         
         let value = cobieTypeParams[field.cobieKey] || typeParams[field.revitParam] || typeParams[field.cobieKey] ||
                     (field.aliasParams || []).map(a => typeParams[a]).find(v => v);
         
         input.value = value || '';
-        input.classList.remove('fix-target');
-        input.removeAttribute('data-user-modified');
         validateCobieInput(input);
     });
     
@@ -2067,6 +2065,23 @@ function computeCommonValues(elements, fieldGetter) {
     return comparison;
 }
 
+function rememberBasePlaceholder(input) {
+    if (!input?.dataset) return '';
+    if (input.dataset.basePlaceholder === undefined) {
+        input.dataset.basePlaceholder = input.getAttribute('placeholder') || '';
+    }
+    return input.dataset.basePlaceholder || '';
+}
+
+function resetInputFromMultiState(input) {
+    if (!input) return;
+    const basePlaceholder = rememberBasePlaceholder(input);
+    input.placeholder = basePlaceholder;
+    input.classList.remove('common-value', 'varies-value', 'all-blank', 'user-modified', 'fix-target', 'invalid-value');
+    input.removeAttribute('data-original-value');
+    input.removeAttribute('data-user-modified');
+}
+
 /**
  * Populate legacy FM_ fields from multi-select with common value logic
  */
@@ -2097,10 +2112,13 @@ function populateMultiSelectFields(elements) {
  * Apply multi-select value info to an input field
  */
 function applyMultiSelectValueToInput(input, info, totalCount) {
+    rememberBasePlaceholder(input);
+
     // Reset state
     input.classList.remove('common-value', 'varies-value', 'all-blank', 'invalid-value');
     input.removeAttribute('data-original-value');
     input.removeAttribute('data-user-modified');
+    input.classList.remove('user-modified', 'fix-target');
     
     if (info.value) {
         // All elements have the same value
@@ -2163,12 +2181,11 @@ function populateTypeFieldsFromMultiSelect(elements) {
     ['Manufacturer', 'Model', 'TypeMark'].forEach(fieldName => {
         const input = document.getElementById(`type_${fieldName}`);
         if (!input) return;
+        resetInputFromMultiState(input);
         
         const info = typeComparison[fieldName] || { value: null, varies: false };
         // Type params should be same across all instances of same type
         input.value = info.value || '';
-        input.removeAttribute('data-user-modified');
-        input.classList.remove('invalid-value', 'fix-target');
     });
     
     const impactEl = document.getElementById('typeImpact');
@@ -2182,11 +2199,10 @@ function populateTypeFieldsFromMultiSelect(elements) {
         const fieldId = `type_${(field.cobieKey || '').replace(/\./g, '_')}`;
         const input = document.getElementById(fieldId);
         if (!input) return;
+        resetInputFromMultiState(input);
         
         const info = cobieTypeComparison[field.cobieKey] || { value: null, varies: false };
         input.value = info.value || '';
-        input.removeAttribute('data-user-modified');
-        input.classList.remove('invalid-value', 'fix-target');
     });
     
     const cobieImpactEl = document.getElementById('cobieTypeImpact');
@@ -2217,9 +2233,8 @@ function populateLegacyFieldsFromElement(el) {
     Object.entries(mappings).forEach(([field, value]) => {
         const input = document.getElementById(`edit_${field}`);
         if (!input) return;
+        resetInputFromMultiState(input);
         input.value = value || '';
-        input.classList.remove('fix-target');
-        input.removeAttribute('data-user-modified');
         validateLegacyInput(field, input);
     });
     
@@ -2232,9 +2247,9 @@ function populateLegacyFieldsFromElement(el) {
 
 function clearCobieInstanceForm() {
     document.querySelectorAll('.cobie-field-input').forEach(input => {
+        resetInputFromMultiState(input);
         input.value = '';
-        input.classList.remove('has-value', 'missing-required', 'invalid-value', 'fix-target');
-        input.removeAttribute('data-user-modified');
+        input.classList.remove('has-value', 'missing-required');
     });
     
     // Clear COBie computed values
@@ -2307,9 +2322,8 @@ function clearInstanceForm() {
     ].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
+        resetInputFromMultiState(el);
         el.value = '';
-        el.classList.remove('invalid-value', 'fix-target');
-        el.removeAttribute('data-user-modified');
     });
 }
 
