@@ -529,6 +529,9 @@ namespace FMReadiness_v3.Services
             if (computedId == "Element.UniqueId")
                 return (true, element.UniqueId);
 
+            if (computedId == "Element.TypeName")
+                return GetTypeName(element, doc);
+
             if (computedId == "Element.LevelName")
                 return GetLevelName(element, doc);
 
@@ -536,6 +539,22 @@ namespace FMReadiness_v3.Services
                 return GetRoomOrSpace(element, doc);
 
             return (false, null);
+        }
+
+        private (bool ok, string value) GetTypeName(Element element, Document doc)
+        {
+            if (element == null || doc == null)
+                return (false, null);
+
+            var typeId = element.GetTypeId();
+            if (typeId == null || typeId == ElementId.InvalidElementId)
+                return (false, null);
+
+            var elementType = doc.GetElement(typeId) as ElementType;
+            if (elementType == null || string.IsNullOrWhiteSpace(elementType.Name))
+                return (false, null);
+
+            return (true, elementType.Name);
         }
 
         private (bool ok, string value) GetLevelName(Element element, Document doc)

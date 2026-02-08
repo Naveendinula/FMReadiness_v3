@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using FMReadiness_v3.Services;
@@ -58,39 +59,56 @@ namespace FMReadiness_v3.Commands
                 var ready = report.FullyReadyAssets;
                 var readinessPct = report.AverageReadinessScore * 100.0;
 
-                var topMissingInstance = report.MissingParamCounts
+                var topMissingComponent = report.MissingParamCounts
                     .OrderByDescending(x => x.Value)
+                    .ThenBy(x => x.Key)
                     .Take(5)
-                    .Select(x => $"- {x.Key} ({x.Value})");
+                    .ToList();
 
                 var topMissingType = report.MissingTypeParamCounts
                     .OrderByDescending(x => x.Value)
+                    .ThenBy(x => x.Key)
                     .Take(5)
-                    .Select(x => $"- {x.Key} ({x.Value})");
+                    .ToList();
 
-                var message =
-                    "FM Readiness Summary\n" +
-                    $"Audit profile: {profileName}\n" +
-                    $"Audit scope: {AuditProfileState.GetScoreModeLabel(scoreMode)}\n" +
-                    $"Overall readiness: {Math.Round(readinessPct, 0)}%\n" +
-                    $"Fully ready assets: {ready} / {total}\n\n" +
-                    "-----------------------------------\n\n" +
-                    "Missing INSTANCE params found\n" +
-                    $"Elements with missing instance data: {report.ElementsWithMissingData}\n\n" +
-                    $"Top missing instance params:\n{string.Join("\n", topMissingInstance)}\n\n" +
-                    "-----------------------------------\n\n" +
-                    "Missing TYPE params found\n" +
-                    $"Elements with missing type data: {report.ElementsWithMissingTypeData}\n\n" +
-                    $"Top missing type params:\n{string.Join("\n", topMissingType)}\n\n" +
-                    "-----------------------------------\n" +
-                    "Results shown in FM Readiness pane.";
+                var dialog = new TaskDialog("FM Data Readiness Audit")
+                {
+                    MainInstruction = $"FM audit complete — {Math.Round(readinessPct, 0)}% readiness",
+                    MainContent =
+                        $"Audit profile: {profileName}\n" +
+                        $"Audit scope: {AuditProfileState.GetScoreModeLabel(scoreMode)}\n" +
+                        $"Fully ready assets: {ready} / {total}\n\n" +
+                        $"Assets with missing component data: {report.ElementsWithMissingData}\n" +
+                        $"Assets with missing type data: {report.ElementsWithMissingTypeData}",
+                    ExpandedContent =
+                        "Top missing component fields:\n" +
+                        FormatTopMissing(topMissingComponent) +
+                        "\n\nTop missing type fields:\n" +
+                        FormatTopMissing(topMissingType),
+                    FooterText = "Detailed results are shown in the FM Readiness pane."
+                };
 
-                TaskDialog.Show("FM Data Readiness Audit", message);
+                dialog.Show();
             }
             catch (Exception ex)
             {
                 TaskDialog.Show("FM Readiness - Error", ex.ToString());
             }
+        }
+
+        private static string FormatTopMissing(IEnumerable<KeyValuePair<string, int>> missingCounts)
+        {
+            var items = missingCounts
+                .Where(x => x.Value > 0)
+                .Take(5)
+                .ToList();
+
+            if (items.Count == 0)
+            {
+                return "None";
+            }
+
+            return string.Join("\n", items.Select((x, index) => $"{index + 1}. {x.Key} ({x.Value})"));
         }
     }
 }

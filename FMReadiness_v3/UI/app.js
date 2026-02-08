@@ -38,6 +38,10 @@ const typeGroupScoresEl = document.getElementById('typeGroupScores');
 const componentGroupMetaEl = document.getElementById('componentGroupMeta');
 const typeGroupMetaEl = document.getElementById('typeGroupMeta');
 const groupScoreHelpEl = document.getElementById('groupScoreHelp');
+const actionNeededPanelEl = document.getElementById('actionNeededPanel');
+const actionNeededTitleEl = document.getElementById('actionNeededTitle');
+const actionNeededMetaEl = document.getElementById('actionNeededMeta');
+const actionNeededListEl = document.getElementById('actionNeededList');
 const categoryScoresEl = document.getElementById('categoryScores');
 const searchInput = document.getElementById('searchInput');
 const showMissingOnly = document.getElementById('showMissingOnly');
@@ -73,6 +77,10 @@ const clearSelectionListEl = document.getElementById('clearSelectionList');
 let skipNextEditorSelectionRefresh = false;
 let selectionTrayExpanded = false;
 const selectionTrayCheckedIds = new Set();
+const auditActionState = {
+    selectedGroup: '',
+    visibleBlockers: []
+};
 
 // Cache of elementId -> views[]
 const viewsByElementId = new Map();
@@ -167,6 +175,7 @@ function receiveAudit(data) {
         summary: data.summary,
         rows: data.rows || []
     };
+    viewsByElementId.clear();
     render();
 }
 
@@ -240,6 +249,7 @@ function render() {
         }
 
         // Render group score badges
+        syncActionGroupFilter(summaryToRender.groupScores || {});
         renderGroupScores(
             summaryToRender.groupScores || {},
             summaryToRender.groupStats || {},
@@ -266,7 +276,10 @@ function render() {
         if (categoryScoresEl) {
             categoryScoresEl.innerHTML = '';
         }
+        syncActionGroupFilter({});
     }
+
+    renderActionNeededPanel(scopedRows);
 
     // Filter rows
     const filteredRows = filterRows(scopedRows);
@@ -448,7 +461,175 @@ function summarizeMissingEntries(entries, fallbackText) {
     return remaining > 0 ? `${head} +${remaining} more` : head;
 }
 
-function renderGroupBadgeList(containerEl, groupScores, groupStats, groupDefinitions, scoreModeLabel) {
+function getMissingReasonInfo(reasonText) {
+    const rawReason = String(reasonText || '').trim();
+    const token = normalizeToken(rawReason);
+    if (!token) {
+        return { token: 'missing', label: 'Missing' };
+    }
+    if (token.includes('dup') || token.includes('unique')) {
+        return { token: 'duplicate', label: 'Duplicate' };
+    }
+    if (token.includes('invalid')) {
+        return { token: 'invalid', label: 'Invalid' };
+    }
+    if (token.includes('missing')) {
+        return { token: 'missing', label: 'Missing' };
+    }
+    return {
+        token,
+        label: rawReason.charAt(0).toUpperCase() + rawReason.slice(1)
+    };
+}
+
+function resolveMissingGroupLabel(entry) {
+    const groupName = String(entry?.group || '').trim();
+    if (groupName) return groupName;
+    return getMissingEntryScope(entry) === 'type' ? 'Type' : 'Component';
+}
+
+function buildActionNeededBlockers(rows) {
+    const blockers = new Map();
+
+    (rows || []).forEach(row => {
+        const elementId = Number(row?.elementId);
+        if (!Number.isFinite(elementId)) return;
+
+        const entries = normalizeMissingFieldEntries(row?.missingFields, row?.missingParams);
+        entries.forEach(entry => {
+            const fieldLabel = String(entry?.label || entry?.key || '').trim();
+            if (!fieldLabel) return;
+
+            const groupName = resolveMissingGroupLabel(entry);
+            const reasonInfo = getMissingReasonInfo(entry?.reason);
+            const blockerKey = `${normalizeToken(groupName)}|${normalizeToken(fieldLabel)}|${reasonInfo.token}`;
+
+            if (!blockers.has(blockerKey)) {
+                blockers.set(blockerKey, {
+                    key: blockerKey,
+                    groupName,
+                    fieldLabel,
+                    reasonLabel: reasonInfo.label,
+                    reasonToken: reasonInfo.token,
+                    elementIds: new Set(),
+                    sampleElementId: null,
+                    sampleEntry: null
+                });
+            }
+
+            const blocker = blockers.get(blockerKey);
+            blocker.elementIds.add(elementId);
+            if (!Number.isFinite(blocker.sampleElementId)) {
+                blocker.sampleElementId = elementId;
+            }
+            if (!blocker.sampleEntry) {
+                blocker.sampleEntry = {
+                    key: String(entry?.key || '').trim(),
+                    label: fieldLabel,
+                    group: groupName,
+                    scope: String(entry?.scope || '').trim(),
+                    required: entry?.required === true,
+                    reason: reasonInfo.label
+                };
+            }
+        });
+    });
+
+    const reasonOrder = {
+        missing: 0,
+        invalid: 1,
+        duplicate: 2
+    };
+
+    return Array.from(blockers.values())
+        .map(item => ({
+            ...item,
+            affectedCount: item.elementIds.size,
+            elementIds: Array.from(item.elementIds).sort((a, b) => a - b)
+        }))
+        .sort((a, b) => {
+            if (b.affectedCount !== a.affectedCount) {
+                return b.affectedCount - a.affectedCount;
+            }
+            const aReason = reasonOrder[a.reasonToken] ?? 99;
+            const bReason = reasonOrder[b.reasonToken] ?? 99;
+            if (aReason !== bReason) {
+                return aReason - bReason;
+            }
+            const groupCompare = a.groupName.localeCompare(b.groupName);
+            if (groupCompare !== 0) return groupCompare;
+            return a.fieldLabel.localeCompare(b.fieldLabel);
+        });
+}
+
+function syncActionGroupFilter(groupScores) {
+    const selected = normalizeToken(auditActionState.selectedGroup);
+    if (!selected) return;
+    const hasGroup = Object.keys(groupScores || {}).some(name => normalizeToken(name) === selected);
+    if (!hasGroup) {
+        auditActionState.selectedGroup = '';
+    }
+}
+
+function renderActionNeededPanel(rows) {
+    if (!actionNeededPanelEl || !actionNeededTitleEl || !actionNeededMetaEl || !actionNeededListEl) return;
+
+    const blockers = buildActionNeededBlockers(rows);
+    const selectedToken = normalizeToken(auditActionState.selectedGroup);
+    const selectedExists = !selectedToken || blockers.some(item => normalizeToken(item.groupName) === selectedToken);
+    if (!selectedExists) {
+        auditActionState.selectedGroup = '';
+    }
+
+    const activeToken = normalizeToken(auditActionState.selectedGroup);
+    const filtered = activeToken
+        ? blockers.filter(item => normalizeToken(item.groupName) === activeToken)
+        : blockers;
+
+    if (blockers.length === 0) {
+        auditActionState.visibleBlockers = [];
+        actionNeededPanelEl.classList.add('hidden');
+        actionNeededTitleEl.textContent = 'Action Needed';
+        actionNeededMetaEl.textContent = '';
+        actionNeededListEl.innerHTML = '';
+        return;
+    }
+
+    const maxItems = 8;
+    const visible = filtered.slice(0, maxItems);
+    auditActionState.visibleBlockers = visible;
+    actionNeededPanelEl.classList.remove('hidden');
+
+    actionNeededTitleEl.textContent = auditActionState.selectedGroup
+        ? `Action Needed | ${auditActionState.selectedGroup}`
+        : 'Action Needed';
+
+    const affectedCount = filtered.reduce((sum, item) => sum + item.affectedCount, 0);
+    const hiddenCount = Math.max(0, filtered.length - visible.length);
+    actionNeededMetaEl.textContent = `${filtered.length} field issue${filtered.length === 1 ? '' : 's'} | ${affectedCount} affected assets${hiddenCount > 0 ? ` | Top ${visible.length} shown` : ''}`;
+
+    if (visible.length === 0) {
+        actionNeededListEl.innerHTML = '<div class="action-needed-empty">No field issues match the selected group filter.</div>';
+        return;
+    }
+
+    actionNeededListEl.innerHTML = visible.map((item, index) => `
+        <div class="action-needed-item">
+            <div class="action-needed-main">
+                <span class="action-needed-field">${escapeHtml(item.fieldLabel)}</span>
+                <span class="action-needed-chip">${escapeHtml(item.groupName)}</span>
+                <span class="action-needed-chip">${escapeHtml(item.reasonLabel)}</span>
+                <span class="action-needed-chip">${item.affectedCount} asset${item.affectedCount === 1 ? '' : 's'}</span>
+            </div>
+            <div class="action-needed-actions">
+                <button type="button" class="action-needed-btn" data-action-needed="select" data-action-index="${index}">Select affected</button>
+                <button type="button" class="action-needed-btn primary" data-action-needed="fix" data-action-index="${index}" ${Number.isFinite(item.sampleElementId) ? '' : 'disabled'}>Fix next</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderGroupBadgeList(containerEl, groupScores, groupStats, groupDefinitions, scoreModeLabel, selectedGroupName) {
     if (!containerEl) return;
     const groups = Object.entries(groupScores || {});
     if (groups.length === 0) {
@@ -456,6 +637,7 @@ function renderGroupBadgeList(containerEl, groupScores, groupStats, groupDefinit
         return;
     }
 
+    const selectedToken = normalizeToken(selectedGroupName);
     containerEl.innerHTML = groups
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([name, pct]) => {
@@ -467,12 +649,13 @@ function renderGroupBadgeList(containerEl, groupScores, groupStats, groupDefinit
         const countLabel = totalChecks > 0 ? `${passedChecks}/${totalChecks}` : '--';
         const definition = getGroupDefinition(groupDefinitions, name);
         const tooltip = buildGroupTooltip(name, pct, stats, definition, scoreModeLabel);
-        return `<div class="group-badge ${scoreClass}">
+        const selectedClass = selectedToken && normalizeToken(name) === selectedToken ? 'is-selected' : '';
+        return `<button type="button" class="group-badge group-filter-badge ${scoreClass} ${selectedClass}" data-group-name="${escapeHtml(name)}" title="${escapeHtml(tooltip)}" aria-pressed="${selectedClass ? 'true' : 'false'}">
             <span class="group-name">${escapeHtml(name)}</span>
             <span class="group-pct">${pct}%</span>
-            <span class="group-count" title="${escapeHtml(tooltip)}">${countLabel}</span>
-            <span class="group-info" title="${escapeHtml(tooltip)}" aria-label="Group details">i</span>
-        </div>`;
+            <span class="group-count">${countLabel}</span>
+            <span class="group-info" aria-label="Group details">i</span>
+        </button>`;
     }).join('');
 }
 
@@ -505,11 +688,14 @@ function renderGroupScoreSections(groupScores, groupStats, groupDefinitions, vie
 
     if (groupScoreHelpEl) {
         const modeLabel = scoreModeLabel ? ` Current scoring mode: ${scoreModeLabel}.` : '';
-        groupScoreHelpEl.textContent = `Hover badges for scope, included fields, and scoring details.${modeLabel}`;
+        const groupFilterLabel = auditActionState.selectedGroup
+            ? ` Active Action Needed filter: ${auditActionState.selectedGroup}.`
+            : '';
+        groupScoreHelpEl.textContent = `Hover badges for scope and scoring details. Click a badge to focus Action Needed.${modeLabel}${groupFilterLabel}`;
     }
 
-    renderGroupBadgeList(componentGroupScoresEl, component, componentStats, componentDefs, scoreModeLabel);
-    renderGroupBadgeList(typeGroupScoresEl, type, typeStats, typeDefs, scoreModeLabel);
+    renderGroupBadgeList(componentGroupScoresEl, component, componentStats, componentDefs, scoreModeLabel, auditActionState.selectedGroup);
+    renderGroupBadgeList(typeGroupScoresEl, type, typeStats, typeDefs, scoreModeLabel, auditActionState.selectedGroup);
 }
 
 function projectAuditRowsByView(rows, viewMode) {
@@ -761,8 +947,8 @@ function renderTable(rows) {
             <td class="group-badges-inline">${groupBadgesHtml}</td>
             <td class="missing-params" title="${escapeHtml(row.missingParamsDisplay || row.missingParams)}">${escapeHtml(row.missingParamsDisplay || row.missingParams) || '-'}</td>
             <td>
-                <select class="view-select" data-element-id="${row.elementId}" disabled>
-                    <option>Select view</option>
+                <select class="view-select" data-element-id="${row.elementId}">
+                    <option value="">Load 2D views</option>
                 </select>
                 <button class="open-view-btn" data-element-id="${row.elementId}" disabled>Open</button>
             </td>
@@ -773,6 +959,11 @@ function renderTable(rows) {
         `;
 
         tableBody.appendChild(tr);
+
+        const cachedViews = viewsByElementId.get(Number(row.elementId));
+        if (Array.isArray(cachedViews)) {
+            populateViewSelector(Number(row.elementId), cachedViews);
+        }
     });
 }
 
@@ -1154,11 +1345,27 @@ function receive2dViewOptions(msg) {
     if (!Number.isFinite(elementId)) return;
 
     viewsByElementId.set(elementId, views);
+    populateViewSelector(elementId, views);
+}
 
+function setViewSelectorLoading(elementId) {
     const select = tableBody.querySelector(`select.view-select[data-element-id="${elementId}"]`);
     if (!select) return;
 
     const openBtn = tableBody.querySelector(`button.open-view-btn[data-element-id="${elementId}"]`);
+    select.innerHTML = '<option value="">Loading 2D views...</option>';
+    select.disabled = false;
+    if (openBtn) {
+        openBtn.disabled = true;
+    }
+}
+
+function populateViewSelector(elementId, views) {
+    const select = tableBody.querySelector(`select.view-select[data-element-id="${elementId}"]`);
+    if (!select) return;
+
+    const openBtn = tableBody.querySelector(`button.open-view-btn[data-element-id="${elementId}"]`);
+    const previousValue = select.value;
 
     select.innerHTML = '';
     const placeholder = document.createElement('option');
@@ -1174,8 +1381,17 @@ function receive2dViewOptions(msg) {
     });
 
     select.disabled = false;
+    if (previousValue && views.some(v => String(v.viewId) === String(previousValue))) {
+        select.value = previousValue;
+    } else if (views.length === 1) {
+        select.value = String(views[0].viewId);
+    } else {
+        select.value = '';
+    }
+
     if (openBtn) {
-        openBtn.disabled = true;
+        const selectedViewId = parseInt(select.value, 10);
+        openBtn.disabled = isNaN(selectedViewId);
     }
 }
 
@@ -1193,6 +1409,43 @@ showMissingOnly.addEventListener('change', () => {
 
 categoryFilterEl?.addEventListener('change', () => {
     render();
+});
+
+const onGroupFilterBadgeClick = (e) => {
+    const badge = e.target.closest('.group-filter-badge');
+    if (!badge) return;
+    const groupName = String(badge.dataset.groupName || '').trim();
+    if (!groupName) return;
+
+    const currentToken = normalizeToken(auditActionState.selectedGroup);
+    const clickedToken = normalizeToken(groupName);
+    auditActionState.selectedGroup = currentToken === clickedToken ? '' : groupName;
+    render();
+};
+
+componentGroupScoresEl?.addEventListener('click', onGroupFilterBadgeClick);
+typeGroupScoresEl?.addEventListener('click', onGroupFilterBadgeClick);
+
+actionNeededListEl?.addEventListener('click', (e) => {
+    const actionBtn = e.target.closest('button[data-action-needed]');
+    if (!actionBtn) return;
+
+    const action = String(actionBtn.dataset.actionNeeded || '').trim();
+    const index = Number(actionBtn.dataset.actionIndex);
+    if (!Number.isInteger(index) || index < 0) return;
+
+    const blocker = auditActionState.visibleBlockers[index];
+    if (!blocker) return;
+
+    if (action === 'select') {
+        setSelectionElements(blocker.elementIds || []);
+        showToast(`Selected ${blocker.affectedCount} asset(s) for ${blocker.fieldLabel}`, 'success');
+        return;
+    }
+
+    if (action === 'fix' && Number.isFinite(blocker.sampleElementId)) {
+        startFixFromAudit(blocker.sampleElementId, [blocker.sampleEntry]);
+    }
 });
 
 auditViewModeEl?.addEventListener('change', () => {
@@ -1213,6 +1466,16 @@ if (auditScoreModeEl) {
 
 // Table row click (event delegation)
 tableBody.addEventListener('click', (e) => {
+    const viewSelect = e.target.closest('select.view-select');
+    if (viewSelect) {
+        const elementId = parseInt(viewSelect.dataset.elementId, 10);
+        if (!isNaN(elementId) && !viewsByElementId.has(elementId)) {
+            setViewSelectorLoading(elementId);
+            request2dViews(elementId);
+        }
+        return;
+    }
+
     const btn = e.target.closest('.locate-btn');
     if (btn) {
         const elementId = parseInt(btn.dataset.id, 10);
@@ -1279,9 +1542,16 @@ tableBody.addEventListener('click', (e) => {
     if (!select) return;
 
     const viewId = parseInt(select.value, 10);
-    if (!isNaN(viewId)) {
-        open2dView(elementId, viewId);
+    if (isNaN(viewId)) {
+        if (!viewsByElementId.has(elementId)) {
+            setViewSelectorLoading(elementId);
+            request2dViews(elementId);
+            showToast('Loading 2D views. Select a view, then click Open.', 'info');
+        }
+        return;
     }
+
+    open2dView(elementId, viewId);
 });
 
 // ========================================
